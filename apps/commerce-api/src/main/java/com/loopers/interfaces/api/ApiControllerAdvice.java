@@ -113,6 +113,14 @@ public class ApiControllerAdvice {
         return failureResponse(ErrorType.INTERNAL_ERROR, null);
     }
 
+    // TODO: 예외처리 변경하는 게 좋을 것 같음
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<?>> handleIllegalArgumentException(IllegalArgumentException e) {
+        log.warn("IllegalArgumentException : {}", e.getMessage());
+        return ResponseEntity.status(401)
+                .body(ApiResponse.fail("UNAUTHORIZED", e.getMessage()));
+    }
+
     private String extractMissingParameter(String message) {
         Pattern pattern = Pattern.compile("'(.+?)'");
         Matcher matcher = pattern.matcher(message);

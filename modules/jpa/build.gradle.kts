@@ -18,4 +18,11 @@ dependencies {
 
     testFixturesImplementation("org.springframework.boot:spring-boot-starter-data-jpa")
     testFixturesImplementation("org.testcontainers:mysql")
+
+    testFixturesImplementation("org.junit.jupiter:junit-jupiter-api")
+    testFixturesImplementation("org.assertj:assertj-core")
+
+    testFixturesImplementation("org.junit.jupiter:junit-jupiter-params")
+
+    testFixturesRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
 }
