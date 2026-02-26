@@ -10,7 +10,8 @@ public enum ErrorType {
     BAD_REQUEST("Bad Request", "잘못된 요청입니다."),
     NOT_FOUND("Not Found", "존재하지 않는 요청입니다."),
     CONFLICT("Conflict", "이미 존재하는 리소스입니다."),
-    UNAUTHORIZED("Unauthorized", "인증에 실패했습니다.");
+    UNAUTHORIZED("Unauthorized", "인증에 실패했습니다."),
+    FORBIDDEN("Forbidden", "접근 권한이 없습니다.");
 
     private final String code;
     private final String message;

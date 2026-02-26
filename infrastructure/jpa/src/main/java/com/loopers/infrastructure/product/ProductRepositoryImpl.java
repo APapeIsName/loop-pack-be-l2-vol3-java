@@ -47,6 +47,11 @@ public class ProductRepositoryImpl implements ProductRepository {
     }
 
     @Override
+    public List<Product> findAllByIdIn(List<Long> ids) {
+        return productJpaRepository.findAllByIdIn(ids);
+    }
+
+    @Override
     public void softDeleteByBrandId(Long brandId) {
         queryFactory
                 .update(product)

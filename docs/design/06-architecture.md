@@ -150,9 +150,9 @@ BaseTimeEntity (id, createdAt, updatedAt)
 | Catalog | `BrandRepository`, `ProductRepository` | interface | Catalog 조회/저장 계약 |
 | Like | `Like` | Entity | 관계 레코드 (hard-delete). `subjectType(enum) + subjectId(Long)` |
 | Like | `LikeRepository` | interface | 좋아요 조회/저장 계약 |
-| Order | `Order` | Entity | 주문 상태 관리, `isOwnedBy(memberId)` |
-| Order | `OrderLine` | Entity | 주문 항목. productId, Quantity 보유. 라인별 확장 지점 |
-| Order | `OrderLineSnapshot` | VO (@Entity) | 주문 시점 불변 스냅샷 (Price 포함). 정규화를 위해 별도 테이블 |
+| Order | `Order` | Entity | Aggregate Root. `place()`로 불변식 검증(빈 주문, 중복 상품), `assignOrderLines()`로 하위 소속 관리, `isOwnedBy(memberId)` |
+| Order | `OrderLine` | Entity | 주문 항목. `orderId(Long)`로 Order 참조. `of()`에서 스냅샷 내부 생성. `assignToOrder()` / `assignSnapshot()`은 self 반환(연산의 닫힘) |
+| Order | `OrderLineSnapshot` | VO (@Entity) | 주문 시점 불변 스냅샷. `orderLineId(Long)`로 OrderLine 참조. 정규화를 위해 별도 테이블 |
 | Order | `Quantity` | VO (@Embeddable) | 수량 > 0 자체 검증 |
 | Order | `OrderRepository` | interface | 주문 조회/저장 계약 |
 
@@ -567,8 +567,8 @@ graph TB
         O["Order\n(Aggregate Root)"]
         OL["OrderLine\n(Entity)"]
         OLS["OrderLineSnapshot\n(VO, @Entity)"]
-        O ---|"포함"| OL
-        OL ---|"1:1"| OLS
+        OL -.->|"orderId (Long)"| O
+        OLS -.->|"orderLineId (Long)"| OL
     end
 
     P -..->|"brandId (Long)"| B

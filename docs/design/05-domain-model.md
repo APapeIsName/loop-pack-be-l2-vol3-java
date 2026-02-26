@@ -147,10 +147,10 @@
 
 | 로직 | 분류 | 이유 |
 |------|------|------|
-| 중복 상품 검증 | Domain (Order) | "같은 상품 중복 주문 불가" = 논리적 비즈니스 규칙 |
+| 중복 상품 검증 | Domain (Order.place) | "같은 상품 중복 주문 불가" = Aggregate Root가 직접 검증하는 논리적 비즈니스 규칙 |
 | productId 정렬 | Application | 데드락 방지 = 물리적/기술적 관심사 |
 | 재고 충분 여부 확인 | Domain (Stock.isEnough) | Stock의 불변식 = 논리적 |
-| 수락/거절 판단 | Domain (Order 또는 OrderDomainService) | "전부 아니면 전무" = 논리적 비즈니스 규칙 |
+| 수락/거절 판단 | Domain (Order.place) | "전부 아니면 전무" = Aggregate Root가 상태를 결정하는 논리적 비즈니스 규칙 |
 | 위 흐름의 오케스트레이션 | Application (OrderService) | Product 조회 + 락 획득 + 트랜잭션 = 물리적 |
 
 ### 예시: 좋아요 등록 (Cross-BC)
@@ -193,7 +193,7 @@
 | Catalog | Brand | (없음) | BrandRepository |
 | Catalog | Product | Price, Stock | ProductRepository |
 | Like | Like | (없음) | LikeRepository |
-| Order | Order | OrderLine, OrderLineSnapshot | OrderRepository |
+| Order | Order | (OrderLine, OrderLineSnapshot은 ID 참조) | OrderRepository |
 
 ### 7-3. Catalog BC: Brand와 Product가 독립 Aggregate인 이유
 

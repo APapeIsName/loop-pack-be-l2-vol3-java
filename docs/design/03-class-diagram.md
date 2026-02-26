@@ -79,23 +79,28 @@ classDiagram
     class Order {
         -Long memberId
         -OrderStatus status
-        -ZonedDateTime orderedAt
-        -List~OrderLine~ lines
+        +place(memberId, orderLines, status)$ Order
         +isOwnedBy(memberId) boolean
+        +assignOrderLines(orderLines) List~OrderLine~
     }
 
     class OrderLine {
+        -Long orderId
         -Long productId
         -Quantity quantity
-        -OrderLineSnapshot snapshot
+        +of(productId, quantity, name, desc, price, brand)$ OrderLine
+        +assignToOrder(orderId) OrderLine
+        +assignSnapshot() OrderLine
     }
 
     class OrderLineSnapshot {
         <<Value Object · @Entity>>
+        -Long orderLineId
         -String productName
         -String productDescription
-        -Price price
+        -long price
         -String brandName
+        +assignToOrderLine(orderLineId) void
     }
 
     class OrderStatus {
@@ -120,8 +125,9 @@ classDiagram
     Like ..> Product : subjectId (Long, subjectType=PRODUCT)
     Like --> LikeSubjectType : subjectType
     Order ..> Member : memberId (Long)
-    Order *-- OrderLine : 1..N
+    OrderLine ..> Order : orderId (Long)
     OrderLine ..> Product : productId (Long)
+    OrderLineSnapshot ..> OrderLine : orderLineId (Long)
     Order --> OrderStatus : status
 ```
 
@@ -136,15 +142,15 @@ classDiagram
 - **Brand**: 고유 ID. 생성 → 수정 → 삭제의 독립 생명주기.
 - **Product**: 고유 ID. 생성 → 수정 → 삭제의 독립 생명주기. 브랜드 삭제 시 연쇄 삭제되지만, 이는 비즈니스 규칙이지 생명주기 종속이 아니다.
 - **Like**: `memberId + subjectType + subjectId`로 고유 식별. 등록 → 삭제의 독립 생명주기. `subjectType`(enum)으로 좋아요 대상 종류를, `subjectId`로 대상 ID를 지정한다.
-- **Order**: 고유 ID. 생성 시 즉시 최종 상태(ACCEPTED/REJECTED)로 결정.
-- **OrderLine**: Order에 종속되는 주문 항목. 상품 ID와 수량을 보유하며, 스냅샷을 1:1로 소유한다. 나중에 쿠폰/부분취소 등 라인별 기능의 확장 지점.
+- **Order**: 고유 ID. Aggregate Root. `place()` 시 orderLines를 받아 불변식(빈 주문, 중복 상품)을 검증하지만, 필드로 보유하지 않는다. 생성 시 즉시 최종 상태(ACCEPTED/REJECTED)로 결정. `assignOrderLines()`로 하위 엔티티의 소속을 관리한다.
+- **OrderLine**: 주문 항목. `orderId(Long)`로 소속 주문을 식별한다. `of()` 팩토리에서 OrderLineSnapshot을 내부 생성한다. 나중에 쿠폰/부분취소 등 라인별 기능의 확장 지점.
 
 **Value Object (VO)**: 고유 식별자가 불필요하며, 자체 규칙(불변식)을 캡슐화하는 불변 객체다.
 
 - **Stock**: 재고의 본질적 규칙("음수가 될 수 없다")을 스스로 지킨다. `decrease(Quantity)` 시 부족하면 예외, 충분하면 새 Stock을 반환한다.
 - **Price**: 가격의 규칙("0보다 커야 한다")을 생성 시 검증한다. 불변.
 - **Quantity**: 수량의 규칙("0보다 커야 한다")을 생성 시 검증한다. Stock.decrease의 인자로 사용된다.
-- **OrderLineSnapshot**: 도메인 관점에서는 VO(불변, 독립 식별 불필요)이지만, 정규화를 위해 @Entity로 별도 테이블에 매핑한다. OrderLine에 1:1로 종속되며, 주문 시점의 상품 정보(이름, 가격, 브랜드명)를 보존한다.
+- **OrderLineSnapshot**: 도메인 관점에서는 VO(불변, 독립 식별 불필요)이지만, 정규화를 위해 @Entity로 별도 테이블에 매핑한다. `orderLineId(Long)`로 소속 주문항목을 식별한다. 주문 시점의 상품 정보(이름, 가격, 브랜드명)를 보존한다.
 
 ### 원칙 2: 단방향 연관, 양방향 최소화
 
@@ -239,8 +245,8 @@ classDiagram
 | Stock | 2 | isEnough(Quantity), decrease(Quantity) | **적절**. 재고의 핵심 규칙만 보유. 같은 불변식(value >= quantity)의 조회/변경 |
 | Price | 0+1 | 생성자 검증 | **적절**. 가격 규칙만 보유 |
 | Quantity | 0+1 | 생성자 검증 | **적절**. 수량 규칙만 보유 |
-| Order | 1 | isOwnedBy | **적절**. 현재 최소 |
-| OrderLine | 0 | - | **적절**. 주문 항목. Quantity와 Snapshot 보유 |
+| Order | 3 | place(검증), isOwnedBy, assignOrderLines | **적절**. Aggregate Root로서 불변식 검증 + 하위 소속 관리 |
+| OrderLine | 3 | of(스냅샷 내부 생성), assignToOrder, assignSnapshot | **적절**. 주문 항목 생성 + 소속 관리. 연산의 닫힘(self 반환) |
 | Like | 0 | - | **적절**. 단순 관계 레코드. subjectType enum으로 대상 구분 |
 | OrderLineSnapshot | 0 | - | **적절**. 불변 스냅샷. Price 포함 |
 
@@ -334,6 +340,10 @@ classDiagram
 | 11 | Product.decreaseStock → Stock.decrease 위임 | 재고 규칙은 재고의 책임. Product는 조율만 수행 | Product가 직접 검증 (책임 혼재) |
 | 12 | BaseEntity/BaseTimeEntity를 다이어그램에서 제외 | 비즈니스 설계에 기술 인프라 클래스가 불필요. 코드 구현 시 적용 | 포함 (기술적 완전성은 높지만 비즈니스 가독성 저하) |
 | 13 | Stock.isEnough(Quantity) + Product.hasEnoughStock(Quantity) 추가 | 주문 시 "확인 먼저, 차감 나중" 흐름에서 재고 확인 판단 주체를 명확화. Quantity가 아닌 Stock이 보유 (같은 불변식, 의존 방향 유지) | Quantity.canBeSatisfiedBy(Stock) (VO 간 순환 의존 발생) |
+| 14 | JPA 관계 매핑(@OneToMany, @ManyToOne, @OneToOne) 금지 | 모든 엔티티 간 참조를 ID(Long)로만. BC 간뿐 아니라 같은 Aggregate 내에서도 동일 적용. 일관된 무FK 철학 | @OneToMany + cascade (편리하나 결합도 증가, JPA 의존 심화) |
+| 15 | Aggregate Root가 하위 불변식 직접 검증 | Order.place()가 orderLines를 받아 빈 주문/중복 상품 검증. DomainService에 위임하지 않음. Aggregate Root = 불변식 게이트키퍼 | OrderDomainService에서 검증 (Root의 책임 약화) |
+| 16 | 연산의 닫힘 패턴 | assign류 메서드가 self를 반환하여 map/체이닝 가능. forEach(void) 대신 map(self 반환) 선호 | void 반환 + forEach (체이닝 불가, 함수형 스타일 불일치) |
+| 17 | Order.place() — 도메인 행위를 표현하는 팩토리 네이밍 | "주문하다" = place. Brand.register()와 동일한 원칙. create() 같은 기술적 이름 금지 | Order.create() (행위 의도 불명확) |
 
 ---
 
@@ -355,5 +365,7 @@ classDiagram
 | VO 간 의존 (Stock ──▷ Quantity) | "재고를 차감하려면 수량이 필요하다"는 도메인 관계를 표현 |
 | 위임 패턴 (decreaseStock → Stock.decrease) | "규칙은 규칙을 아는 객체가 수행한다"는 객체지향 원칙을 표현 |
 | 연관 방향 (전부 단방향 ID 참조) | BC 경계가 다이어그램에서 바로 보임 |
-| Composition (Order ◆── OrderLine → OrderLineSnapshot) | "주문 항목과 스냅샷은 주문의 일부"라는 생명주기 종속을 시각적으로 표현 |
+| ID 참조 (OrderLine → orderId, OrderLineSnapshot → orderLineId) | "주문 항목과 스냅샷은 주문에 종속되지만 ID로만 참조"라는 무FK 원칙 일관성 |
+| Aggregate Root 불변식 (Order.place → 검증) | "Aggregate Root가 하위 엔티티의 불변식을 직접 검증"하는 DDD 원칙 |
+| 연산의 닫힘 (assignToOrder → OrderLine) | assign류 메서드가 self를 반환하여 map/체이닝을 가능하게 하는 함수형 패턴 |
 | 메서드 없는 엔티티 (Like) | "관계 기록"이라는 본질에 충실 — 억지 행위 없음. subjectType enum으로 대상 종류 구분 |
