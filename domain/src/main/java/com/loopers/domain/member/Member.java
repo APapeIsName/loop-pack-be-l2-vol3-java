@@ -14,7 +14,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
-import java.util.Objects;
 
 @Entity
 @Getter
@@ -59,20 +58,12 @@ public class Member extends BaseTimeEntity {
         return getId() != null ? MemberId.of(getId()) : null;
     }
 
+    public boolean matchesPassword(String rawPassword, PasswordEncryptor encryptor) {
+        return this.password.matches(rawPassword, encryptor);
+    }
+
     public void updatePassword(String newRawPassword, PasswordEncryptor encryptor) {
         this.password = password.changeTo(newRawPassword, birthDate, encryptor);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof Member member)) return false;
-        return getId() != null && Objects.equals(getId(), member.getId());
-    }
-
-    @Override
-    public int hashCode() {
-        return getClass().hashCode();
     }
 
     private static void validateBirthDate(LocalDate birthDate) {

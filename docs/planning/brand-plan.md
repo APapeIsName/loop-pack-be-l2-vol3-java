@@ -84,33 +84,33 @@ Brand는 `name` 하나의 필드만 가지며, 검증 규칙이 단순하여 별
 ```
 Presentation Layer (commerce-api)
 ├── interfaces/api/brand/dto/
-│   ├── CreateBrandApiRequest.java      → CreateBrandCommand 변환
-│   ├── UpdateBrandApiRequest.java      → UpdateBrandCommand 변환
+│   ├── BrandCreateApiRequest.java      → BrandCreateCommand 변환
+│   ├── BrandUpdateApiRequest.java      → BrandUpdateCommand 변환
 │   └── BrandApiResponse.java           ← BrandInfo 변환
 │
 Application Layer (commerce-service)
 ├── application/service/dto/
-│   ├── CreateBrandCommand.java         (record)
-│   ├── UpdateBrandCommand.java         (record)
+│   ├── BrandCreateCommand.java         (record)
+│   ├── BrandUpdateCommand.java         (record)
 │   └── BrandInfo.java                  (record, from(Brand))
 ```
 
-### 2-5. CatalogDomainService (Product 구현 후)
+### 2-5. BrandDeleteService (Product 구현 후)
 
-Brand 삭제 시 소속 Product도 연쇄 soft-delete해야 한다. Brand와 Product는 같은 BC(Catalog)의 독립 Aggregate이므로, cross-aggregate 규칙은 **CatalogDomainService**(Domain 레이어)에서 처리한다.
+Brand 삭제 시 소속 Product도 연쇄 soft-delete해야 한다. Brand와 Product는 같은 BC(Catalog)의 독립 Aggregate이므로, cross-aggregate 규칙은 **BrandDeleteService**(Domain 레이어)에서 처리한다.
 
 - **현재**: `AdminBrandService.delete()` — Brand만 삭제 (Product 미구현)
-- **Product 구현 후**: `AdminBrandService.delete()` → `CatalogDomainService.deleteBrand()` 호출
+- **Product 구현 후**: `AdminBrandService.delete()` → `BrandDeleteService.delete()` 호출
 
 ```java
-// domain/src/main/java/com/loopers/domain/catalog/CatalogDomainService.java
+// domain/src/main/java/com/loopers/domain/catalog/BrandDeleteService.java
 // Product 구현 후 추가
 @RequiredArgsConstructor
-public class CatalogDomainService {
+public class BrandDeleteService {
     private final BrandRepository brandRepository;
     private final ProductRepository productRepository;
 
-    public void deleteBrand(Long brandId) {
+    public void delete(Long brandId) {
         Brand brand = brandRepository.findById(brandId)
             .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
                 BrandExceptionMessage.NOT_FOUND.message()));
@@ -120,7 +120,7 @@ public class CatalogDomainService {
 }
 ```
 
-> Facade와의 차이: Facade는 Application Service 간 순환 참조 해소 용도. Brand↔Product는 같은 BC이므로 Domain Service가 적합하다.
+> Facade와의 차이: Facade는 Application Service 간 순환 참조 해소 용도. Brand 삭제 → Product 연쇄는 같은 BC의 cross-aggregate 도메인 규칙이므로 Domain Service가 적합하다.
 
 ---
 
@@ -188,10 +188,10 @@ public interface BrandRepository {
 - `getActiveBrands()` — 활성 브랜드 목록 반환
 
 **AdminBrandService** (Admin):
-- `create(CreateBrandCommand)` — 중복 검사 + 생성
+- `create(BrandCreateCommand)` — 중복 검사 + 생성
 - `getById(Long)` — 단건 조회
 - `getAll()` — 전체 목록 조회 (삭제 포함)
-- `update(Long, UpdateBrandCommand)` — 중복 검사 + 수정
+- `update(Long, BrandUpdateCommand)` — 중복 검사 + 수정
 - `delete(Long)` — soft-delete
 
 테스트 케이스 (AdminBrandServiceTest):
@@ -227,7 +227,7 @@ public interface BrandJpaRepository extends JpaRepository<Brand, Long> {
 - `GET /api/admin/brands/{id}` → `AdminBrandService.getById()`
 - `GET /api/admin/brands` → `AdminBrandService.getAll()`
 - `PUT /api/admin/brands/{id}` → `AdminBrandService.update()`
-- `DELETE /api/admin/brands/{id}` → `AdminBrandService.delete()` (Product 구현 후: `CatalogDomainService.deleteBrand()` 경유)
+- `DELETE /api/admin/brands/{id}` → `AdminBrandService.delete()` (Product 구현 후: `BrandDeleteService.delete()` 경유)
 
 ### Step 8: 통합 / E2E 테스트
 
@@ -262,8 +262,8 @@ public interface BrandJpaRepository extends JpaRepository<Brand, Long> {
 |------|------|
 | `application/commerce-service/src/main/java/com/loopers/application/service/BrandService.java` | User Service |
 | `application/commerce-service/src/main/java/com/loopers/application/service/AdminBrandService.java` | Admin Service |
-| `application/commerce-service/src/main/java/com/loopers/application/service/dto/CreateBrandCommand.java` | 생성 DTO |
-| `application/commerce-service/src/main/java/com/loopers/application/service/dto/UpdateBrandCommand.java` | 수정 DTO |
+| `application/commerce-service/src/main/java/com/loopers/application/service/dto/BrandCreateCommand.java` | 생성 DTO |
+| `application/commerce-service/src/main/java/com/loopers/application/service/dto/BrandUpdateCommand.java` | 수정 DTO |
 | `application/commerce-service/src/main/java/com/loopers/application/service/dto/BrandInfo.java` | 응답 DTO |
 | `application/commerce-service/src/test/java/com/loopers/application/service/BrandServiceTest.java` | User Service 테스트 |
 | `application/commerce-service/src/test/java/com/loopers/application/service/AdminBrandServiceTest.java` | Admin Service 테스트 |
@@ -274,8 +274,8 @@ public interface BrandJpaRepository extends JpaRepository<Brand, Long> {
 |------|------|
 | `presentation/commerce-api/src/main/java/com/loopers/interfaces/api/brand/BrandController.java` | User Controller |
 | `presentation/commerce-api/src/main/java/com/loopers/interfaces/api/brand/AdminBrandController.java` | Admin Controller |
-| `presentation/commerce-api/src/main/java/com/loopers/interfaces/api/brand/dto/CreateBrandApiRequest.java` | Presentation 생성 DTO |
-| `presentation/commerce-api/src/main/java/com/loopers/interfaces/api/brand/dto/UpdateBrandApiRequest.java` | Presentation 수정 DTO |
+| `presentation/commerce-api/src/main/java/com/loopers/interfaces/api/brand/dto/BrandCreateApiRequest.java` | Presentation 생성 DTO |
+| `presentation/commerce-api/src/main/java/com/loopers/interfaces/api/brand/dto/BrandUpdateApiRequest.java` | Presentation 수정 DTO |
 | `presentation/commerce-api/src/main/java/com/loopers/interfaces/api/brand/dto/BrandApiResponse.java` | Presentation 응답 DTO |
 | `presentation/commerce-api/src/test/java/com/loopers/controller/BrandE2ETest.java` | E2E 테스트 |
 

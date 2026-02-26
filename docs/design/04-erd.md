@@ -58,21 +58,27 @@ erDiagram
         DATETIME updated_at "NOT NULL"
     }
 
-    order_line_snapshot {
+    order_line {
         BIGINT id PK "AUTO_INCREMENT"
         BIGINT order_id "NOT NULL"
         BIGINT product_id "NOT NULL"
+        INT quantity "NOT NULL"
+    }
+
+    order_line_snapshot {
+        BIGINT id PK "AUTO_INCREMENT"
+        BIGINT order_line_id "NOT NULL"
         VARCHAR product_name "NOT NULL"
         TEXT product_description "nullable"
         INT price "NOT NULL"
-        INT quantity "NOT NULL"
         VARCHAR brand_name "NOT NULL"
     }
 
     brand ||--o{ product : "brand_id"
     member ||--o{ likes : "member_id"
     member ||--o{ orders : "member_id"
-    orders ||--o{ order_line_snapshot : "order_id"
+    orders ||--o{ order_line : "order_id"
+    order_line ||--|| order_line_snapshot : "order_line_id"
 ```
 
 > **관계선 = 논리 참조**. DB에 FK 제약조건은 존재하지 않는다. 참조 무결성은 애플리케이션 레벨에서 보장한다.
@@ -96,7 +102,7 @@ erDiagram
 |----|----------|---------|--------------|
 | Stock | product.stock | INT | >= 0 (음수 불가) |
 | Price | product.price, order_line_snapshot.price | INT | > 0 (양수만) |
-| Quantity | order_line_snapshot.quantity | INT | > 0 (양수만) |
+| Quantity | order_line.quantity | INT | > 0 (양수만) |
 
 > VO는 코드 구조이지 DB 구조가 아니다 (클래스 다이어그램 안티패턴 #3).
 > DB에는 INT 컬럼으로 저장되고, 앱에서 VO 객체로 감싸서 규칙을 검증한다.
@@ -116,7 +122,7 @@ JPA 상속은 `@MappedSuperclass`를 사용한다. 상속 클래스별로 별도
 |----------|--------|----------------|------|
 | soft-delete | brand, product | 있음 | BaseEntity |
 | hard-delete | likes | 없음 | BaseTimeEntity |
-| 삭제 없음 | orders, order_line_snapshot | 없음 | BaseTimeEntity / 없음 |
+| 삭제 없음 | orders, order_line, order_line_snapshot | 없음 | BaseTimeEntity / 없음 |
 
 ---
 
@@ -198,23 +204,33 @@ BaseTimeEntity 상속 (삭제 없음). 테이블명은 `orders` (ORDER는 SQL �
 
 - **status**: 주문 생성 시 즉시 최종 상태(ACCEPTED/REJECTED)로 결정된다. 중간 상태 없음.
 
-### order_line_snapshot
+### order_line
 
-Order에 종속되는 VO. Composition 1:N.
+Order에 종속되는 주문 항목. Composition 1:N.
 
 | 컬럼 | 타입 | 제약 | 비고 |
 |-------|------|------|------|
-| id | BIGINT | PK, AUTO_INCREMENT | JPA 매핑용 |
+| id | BIGINT | PK, AUTO_INCREMENT | |
 | order_id | BIGINT | NOT NULL | → orders.id (FK 없음) |
-| product_id | BIGINT | NOT NULL | 스냅샷 시점 상품 ID |
+| product_id | BIGINT | NOT NULL | 주문 시점 상품 ID |
+| quantity | INT | NOT NULL | VO: Quantity (주문 수량) |
+
+- **확장 지점**: 향후 쿠폰 적용, 부분 취소 등 라인별 기능 확장 시 이 테이블에 컬럼/관계 추가.
+
+### order_line_snapshot
+
+OrderLine에 1:1로 종속되는 불변 스냅샷. 도메인 VO이지만 정규화를 위해 @Entity로 별도 테이블.
+
+| 컬럼 | 타입 | 제약 | 비고 |
+|-------|------|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | |
+| order_line_id | BIGINT | NOT NULL | → order_line.id (FK 없음) |
 | product_name | VARCHAR | NOT NULL | 스냅샷 |
 | product_description | TEXT | nullable | 스냅샷 |
 | price | INT | NOT NULL | VO: Price (주문 시점 가격) |
-| quantity | INT | NOT NULL | VO: Quantity (주문 수량) |
 | brand_name | VARCHAR | NOT NULL | 스냅샷 시점 브랜드명 |
 
-- **timestamp 없음**: 불변 VO. 생성 시점은 소속 Order의 created_at/ordered_at이 대변한다.
-- **id 컬럼 존재 이유**: 도메인에서는 VO(독립 식별 불필요)이지만, JPA 1:N 매핑에 PK가 필요하다.
+- **timestamp 없음**: 불변. 생성 시점은 소속 Order의 created_at/ordered_at이 대변한다.
 - **상품/브랜드 삭제 무관**: 스냅샷이므로 원본이 삭제되어도 기록은 유지된다.
 
 ---
@@ -226,7 +242,7 @@ Order에 종속되는 VO. Composition 1:N.
 | 1 | FK 제약조건 없음 | 앱 레벨에서 참조 무결성 관리. BC 간 결합도 최소화. MSA 전환 대비 | FK 설정 (DB 정합성 보장이 강하나, BC 간 결합 증가) |
 | 2 | VO는 컬럼으로 매핑 | VO는 코드 구조이지 DB 구조가 아니다. 별도 테이블은 안티패턴 | VO별 테이블 (과도한 JOIN, 도메인 의미 왜곡) |
 | 3 | order → orders 테이블명 | ORDER는 SQL 예약어. 백틱 의존보다 명확한 이름 사용 | 백틱으로 감싸기 (DB 종류 변경 시 호환성 문제) |
-| 4 | OrderLineSnapshot에 id 컬럼 포함 | 도메인 VO이지만 JPA @OneToMany 매핑에 PK 필요 | @ElementCollection (컬렉션 전체 삭제/재삽입 성능 이슈) |
+| 4 | OrderLine + OrderLineSnapshot 분리 | OrderLine은 주문 항목(Entity), OrderLineSnapshot은 불변 스냅샷(VO, @Entity). 정규화 유지 + 라인별 확장 지점 확보 | 하나로 합치기 (확장 어려움), @Embeddable (정규화 위반) |
 | 5 | OrderLineSnapshot에 timestamp 없음 | 불변 VO. Order의 created_at이 생성 시점을 대변 | timestamp 포함 (불필요한 중복 정보) |
 | 6 | likes에 UNIQUE(member_id, subject_type, subject_id) | 중복 좋아요 방지를 DB 레벨에서 보장. subjectType+subjectId 일반화로 단일 테이블에서 모든 좋아요 타입의 중복 차단 | 앱 레벨만 (경쟁 조건에 취약), 타입별 테이블 분리 (UNIQUE는 쉬우나 스키마 변경 필요) |
 | 7 | brand.name에 UNIQUE 제약 | 이름 중복 불가 요구사항. delete 시 이름 변경으로 UNIQUE 해소 (클래스 다이어그램 결정 #3) | UNIQUE 없이 앱 검증만 (동시성에 취약) |
@@ -247,8 +263,9 @@ Order에 종속되는 VO. Composition 1:N.
 | likes.member_id | member.id | 좋아요 등록 | 인증 컨텍스트 | 인증된 memberId만 사용 (암묵적 검증) |
 | likes.subject_id | product.id | 좋아요 등록 | LikeService | `ProductService.getActiveProduct()` (상품+브랜드 활성 확인) |
 | orders.member_id | member.id | 주문 생성 | 인증 컨텍스트 | 인증된 memberId만 사용 (암묵적 검증) |
-| order_line_snapshot.order_id | orders.id | 주문 생성 | OrderService | Order와 함께 생성 (Composition, 독립 생성 불가) |
-| order_line_snapshot.product_id | product.id | 주문 생성 | OrderService | `ProductService.getProductForOrder()` (비관적 락 + 활성 확인) |
+| order_line.order_id | orders.id | 주문 생성 | OrderService | Order와 함께 생성 (Composition, 독립 생성 불가) |
+| order_line.product_id | product.id | 주문 생성 | OrderService | `ProductService.getProductForOrder()` (비관적 락 + 활성 확인) |
+| order_line_snapshot.order_line_id | order_line.id | 주문 생성 | OrderService | OrderLine과 함께 생성 (1:1 종속, 독립 생성 불가) |
 
 ### 삭제 시 참조 보호 규칙
 
@@ -257,7 +274,7 @@ Order에 종속되는 VO. Composition 1:N.
 | brand (soft-delete) | product | 연쇄 soft-delete | AdminBrandFacade → `ProductService.softDeleteByBrandId()` |
 | brand (soft-delete) | likes | 처리 없음 | 목록 조회 시 LikeRepository가 자연 필터링 |
 | product (soft-delete) | likes | 처리 없음 | 목록 조회 시 LikeRepository가 자연 필터링 |
-| product (soft-delete) | order_line_snapshot | 영향 없음 | 스냅샷이므로 원본 상태와 무관 |
+| product (soft-delete) | order_line, order_line_snapshot | 영향 없음 | 스냅샷이므로 원본 상태와 무관 |
 
 ### 고아 레코드 방지 원칙
 
@@ -305,8 +322,14 @@ Order에 종속되는 VO. Composition 1:N.
 |--------|------|------|----------|
 | idx_orders_member_ordered | (member_id, ordered_at) | INDEX | `findByMemberIdAndPeriod` |
 
+### order_line
+
+| 인덱스 | 컬럼 | 타입 | 사용 쿼리 |
+|--------|------|------|----------|
+| idx_ol_order_id | order_id | INDEX | Order와 함께 로딩 |
+
 ### order_line_snapshot
 
 | 인덱스 | 컬럼 | 타입 | 사용 쿼리 |
 |--------|------|------|----------|
-| idx_ols_order_id | order_id | INDEX | `findWithSnapshotsById` (Order와 함께 로딩) |
+| idx_ols_order_line_id | order_line_id | INDEX | OrderLine과 함께 로딩 (1:1) |

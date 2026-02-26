@@ -80,17 +80,21 @@ classDiagram
         -Long memberId
         -OrderStatus status
         -ZonedDateTime orderedAt
-        -List~OrderLineSnapshot~ lines
+        -List~OrderLine~ lines
         +isOwnedBy(memberId) boolean
     }
 
-    class OrderLineSnapshot {
-        <<Value Object>>
+    class OrderLine {
         -Long productId
+        -Quantity quantity
+        -OrderLineSnapshot snapshot
+    }
+
+    class OrderLineSnapshot {
+        <<Value Object · @Entity>>
         -String productName
         -String productDescription
         -Price price
-        -Quantity quantity
         -String brandName
     }
 
@@ -103,8 +107,9 @@ classDiagram
     %% ── VO 포함 (Composition) ──
     Product *-- Stock : stock
     Product *-- Price : price
+    OrderLine *-- Quantity : quantity
+    OrderLine --> OrderLineSnapshot : snapshot (1:1)
     OrderLineSnapshot *-- Price : 주문 시점 가격
-    OrderLineSnapshot *-- Quantity : quantity
 
     %% ── VO 간 행위 의존 ──
     Stock ..> Quantity : isEnough / decrease
@@ -115,7 +120,8 @@ classDiagram
     Like ..> Product : subjectId (Long, subjectType=PRODUCT)
     Like --> LikeSubjectType : subjectType
     Order ..> Member : memberId (Long)
-    Order *-- OrderLineSnapshot : 1..N
+    Order *-- OrderLine : 1..N
+    OrderLine ..> Product : productId (Long)
     Order --> OrderStatus : status
 ```
 
@@ -131,13 +137,14 @@ classDiagram
 - **Product**: 고유 ID. 생성 → 수정 → 삭제의 독립 생명주기. 브랜드 삭제 시 연쇄 삭제되지만, 이는 비즈니스 규칙이지 생명주기 종속이 아니다.
 - **Like**: `memberId + subjectType + subjectId`로 고유 식별. 등록 → 삭제의 독립 생명주기. `subjectType`(enum)으로 좋아요 대상 종류를, `subjectId`로 대상 ID를 지정한다.
 - **Order**: 고유 ID. 생성 시 즉시 최종 상태(ACCEPTED/REJECTED)로 결정.
+- **OrderLine**: Order에 종속되는 주문 항목. 상품 ID와 수량을 보유하며, 스냅샷을 1:1로 소유한다. 나중에 쿠폰/부분취소 등 라인별 기능의 확장 지점.
 
 **Value Object (VO)**: 고유 식별자가 불필요하며, 자체 규칙(불변식)을 캡슐화하는 불변 객체다.
 
 - **Stock**: 재고의 본질적 규칙("음수가 될 수 없다")을 스스로 지킨다. `decrease(Quantity)` 시 부족하면 예외, 충분하면 새 Stock을 반환한다.
 - **Price**: 가격의 규칙("0보다 커야 한다")을 생성 시 검증한다. 불변.
 - **Quantity**: 수량의 규칙("0보다 커야 한다")을 생성 시 검증한다. Stock.decrease의 인자로 사용된다.
-- **OrderLineSnapshot**: Order 없이 존재할 수 없다. 주문 시점의 Price와 Quantity를 포함하며, 한번 생성되면 불변이다.
+- **OrderLineSnapshot**: 도메인 관점에서는 VO(불변, 독립 식별 불필요)이지만, 정규화를 위해 @Entity로 별도 테이블에 매핑한다. OrderLine에 1:1로 종속되며, 주문 시점의 상품 정보(이름, 가격, 브랜드명)를 보존한다.
 
 ### 원칙 2: 단방향 연관, 양방향 최소화
 
@@ -197,10 +204,11 @@ classDiagram
 | Like | Entity | member+subjectType+subjectId 식별 | 독립 (등록→삭제) | - | hard-delete |
 | LikeSubjectType | enum | - | - | - | - |
 | Order | Entity | 고유 ID | 독립 (생성→최종 상태) | - | 삭제 없음 |
+| OrderLine | Entity | 고유 ID | Order에 종속 | - | Order와 동일 |
+| OrderLineSnapshot | **VO** (JPA @Entity) | JPA 매핑용 | OrderLine에 종속, 불변 | Price 포함 | OrderLine과 동일 |
 | Stock | **VO** | 불필요 | Product에 종속 | value >= 0, decrease 시 비음수 검증 | Product와 동일 |
 | Price | **VO** | 불필요 | Product 또는 Snapshot에 종속 | value > 0 | 소유자와 동일 |
-| Quantity | **VO** | 불필요 | Snapshot에 종속 | value > 0 | 소유자와 동일 |
-| OrderLineSnapshot | **VO** | 불필요 | Order에 종속, 불변 | Price·Quantity에 위임 | Order와 동일 |
+| Quantity | **VO** | 불필요 | OrderLine에 종속 | value > 0 | 소유자와 동일 |
 | OrderStatus | enum | - | - | - | - |
 
 ### VO 선별 기준: "자체 규칙이 있는가?"
@@ -210,7 +218,7 @@ classDiagram
 ├── Stock: 음수 불가 + 차감 행위
 ├── Price: 양수만 가능
 ├── Quantity: 양수만 가능
-└── OrderLineSnapshot: 주문에 종속 + 불변 + Price·Quantity 포함
+└── OrderLineSnapshot: OrderLine에 종속 + 불변 + Price 포함 (JPA @Entity로 별도 테이블)
 
 자체 규칙 없음 → 원시 타입 유지
 ├── name (String): 단순 필수값
@@ -232,8 +240,9 @@ classDiagram
 | Price | 0+1 | 생성자 검증 | **적절**. 가격 규칙만 보유 |
 | Quantity | 0+1 | 생성자 검증 | **적절**. 수량 규칙만 보유 |
 | Order | 1 | isOwnedBy | **적절**. 현재 최소 |
+| OrderLine | 0 | - | **적절**. 주문 항목. Quantity와 Snapshot 보유 |
 | Like | 0 | - | **적절**. 단순 관계 레코드. subjectType enum으로 대상 구분 |
-| OrderLineSnapshot | 0 | - | **적절**. 불변 VO. Price, Quantity를 포함하여 스냅샷 |
+| OrderLineSnapshot | 0 | - | **적절**. 불변 스냅샷. Price 포함 |
 
 ### Service별
 
@@ -248,7 +257,7 @@ classDiagram
 
 | Domain Service | 존재 이유 | 판단 |
 |----------------|----------|------|
-| CatalogDomainService | 같은 BC(Catalog) 내 Brand↔Product cross-aggregate 규칙 처리 (브랜드 삭제 연쇄, 상품 등록 브랜드 검증) | **적절**. 같은 BC 내 도메인 규칙이므로 Domain Service가 적합 |
+| BrandDeleteService | Brand 삭제 시 소속 Product 연쇄 soft-delete | **적절**. 같은 BC 내 cross-aggregate 도메인 규칙이므로 Domain Service가 적합 |
 
 ---
 
@@ -317,7 +326,7 @@ classDiagram
 | 3 | Brand.delete(): 이름 변경 + soft-delete | DB UNIQUE 제약 유지하면서 삭제된 브랜드 이름 재사용 가능 | 앱 레벨 검증만 (UNIQUE 없음), UNIQUE 제거 (데이터 정합성 약화) |
 | 4 | OrderStatus: ACCEPTED, REJECTED만 | 현재 요구사항에 중간 상태/취소 없음. enum이므로 확장 용이 | CANCELLED 포함 (현재 불필요, YAGNI) |
 | 5 | 모든 BC 간 참조를 ID(Long)만 사용 | BC 간 직접 의존 제거. MSA 전환 시 변경 최소화 | 객체 참조 (편리하나 BC 경계 위반) |
-| 6 | OrderLineSnapshot은 VO | Order 없이 존재 불가, 불변, 독립 식별 불필요 | Entity로 분류 (불필요한 생명주기 관리) |
+| 6 | OrderLine(Entity) + OrderLineSnapshot(VO, @Entity) 분리 | OrderLine은 주문 항목으로 라인별 확장 지점(쿠폰, 부분취소). OrderLineSnapshot은 불변 스냅샷으로 정규화를 위해 별도 테이블 | OrderLineSnapshot 하나로 합치기 (확장 어려움), @Embeddable (정규화 위반) |
 | 7 | Like에 메서드 없음 | 단순 관계 레코드. hard-delete이므로 엔티티 행위 불필요 | toggle() 등 추가 (과도한 추상화) |
 | 8 | 양방향 연관 0개 | 단방향만으로 모든 요구사항 충족. 양방향은 순환 의존과 복잡성 유발 | Product ↔ Brand 양방향 (편의성 vs 복잡성 트레이드오프) |
 | 9 | Like를 subjectType+subjectId로 일반화 | 상속(JOINED/SINGLE_TABLE) 대신 enum+ID 패턴 채택. UNIQUE 제약 자연스러움, 스키마 변경 없이 타입 확장, 무FK 철학 일관 | JPA 상속 (JOINED: UNIQUE 불가+JOIN 비용, SINGLE_TABLE: nullable 컬럼), ProductLike/BrandLike 클래스 분리 (타입 추가마다 엔티티+테이블 필요) |
@@ -346,5 +355,5 @@ classDiagram
 | VO 간 의존 (Stock ──▷ Quantity) | "재고를 차감하려면 수량이 필요하다"는 도메인 관계를 표현 |
 | 위임 패턴 (decreaseStock → Stock.decrease) | "규칙은 규칙을 아는 객체가 수행한다"는 객체지향 원칙을 표현 |
 | 연관 방향 (전부 단방향 ID 참조) | BC 경계가 다이어그램에서 바로 보임 |
-| Composition (Order ◆── OrderLineSnapshot) | "스냅샷은 주문의 일부"라는 생명주기 종속을 시각적으로 표현 |
+| Composition (Order ◆── OrderLine → OrderLineSnapshot) | "주문 항목과 스냅샷은 주문의 일부"라는 생명주기 종속을 시각적으로 표현 |
 | 메서드 없는 엔티티 (Like) | "관계 기록"이라는 본질에 충실 — 억지 행위 없음. subjectType enum으로 대상 종류 구분 |

@@ -1,7 +1,7 @@
 package com.loopers.application;
 
 import com.loopers.application.service.MemberService;
-import com.loopers.application.service.dto.RegisterMemberCommand;
+import com.loopers.application.service.dto.MemberRegisterCommand;
 import com.loopers.application.service.dto.MemberInfo;
 import com.loopers.domain.member.*;
 import com.loopers.domain.member.vo.LoginId;
@@ -38,7 +38,7 @@ class MemberServiceTest {
     void 회원가입_시_아이디_중복_불가() {
         // given
         String inputId = "apape123";
-        RegisterMemberCommand request = new RegisterMemberCommand(
+        MemberRegisterCommand request = new MemberRegisterCommand(
                 inputId, "password123!", "공명선", LocalDate.of(2001, 2, 9), "gms72901217@gmail.com");
         when(memberRepository.existsByLoginId(inputId)).thenReturn(true);
 
@@ -53,7 +53,7 @@ class MemberServiceTest {
     void 회원가입_성공_시_저장된다() {
         // given
         String inputId = "newId123";
-        RegisterMemberCommand request = new RegisterMemberCommand(
+        MemberRegisterCommand request = new MemberRegisterCommand(
                inputId, "password123!", "공명선", LocalDate.of(2001, 2, 9), "gms72901217@gmail.com");
         when(memberRepository.existsByLoginId(inputId)).thenReturn(false);
 

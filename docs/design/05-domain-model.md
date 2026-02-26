@@ -37,7 +37,7 @@
 
 4. `Order Context`
 - 책임: 주문 생성/조회, 주문 스냅샷 보존, 수락/거절 판단
-- Aggregate: `Order` (+ `OrderLineSnapshot` VO)
+- Aggregate: `Order` (+ `OrderLine` Entity, `OrderLineSnapshot` VO)
 - 참고: 재고 차감은 Catalog Context(Product)의 책임이며, Order Context는 ProductService를 통해 요청만 한다.
 
 참고:
@@ -113,7 +113,7 @@
 - 위치: Application 레이어
 - 도입 기준: Application Service A가 Application Service B를 필요로 하고, B도 A를 필요로 할 때
 - 주의: 같은 BC 내 cross-aggregate 규칙은 Facade가 아닌 Domain Service로 해결한다
-  - 예: Brand 삭제 → Product 연쇄 삭제는 같은 BC(Catalog)이므로 `CatalogDomainService`가 처리
+  - 예: Brand 삭제 → Product 연쇄 삭제는 같은 BC(Catalog)이므로 `BrandDeleteService`가 처리
 
 ---
 
@@ -193,7 +193,7 @@
 | Catalog | Brand | (없음) | BrandRepository |
 | Catalog | Product | Price, Stock | ProductRepository |
 | Like | Like | (없음) | LikeRepository |
-| Order | Order | OrderLineSnapshot | OrderRepository |
+| Order | Order | OrderLine, OrderLineSnapshot | OrderRepository |
 
 ### 7-3. Catalog BC: Brand와 Product가 독립 Aggregate인 이유
 
@@ -201,13 +201,13 @@
 - **규모 차이**: 하나의 Brand에 수천 개 Product가 소속 가능. Brand Aggregate에 Product를 포함하면 메모리/성능 문제
 - **독립 변경**: Product 가격/재고 수정 시 Brand를 잠글 필요 없음
 
-Brand ↔ Product cross-aggregate 규칙(삭제 연쇄, 생성 시 브랜드 검증)은 **CatalogDomainService**에서 처리한다.
+Brand 삭제 시 소속 Product 연쇄 삭제는 **BrandDeleteService**에서 처리한다. 상품 등록 시 Brand 활성 검증은 Application Service에서 오케스트레이션한다.
 
 ### 7-4. 트랜잭션 경계
 
 - **기본 원칙**: 하나의 트랜잭션에서 하나의 Aggregate만 변경한다.
 - **같은 BC 내 예외**: 같은 BC 안에서 cross-aggregate 변경이 필요한 경우, Domain Service가 같은 트랜잭션에서 처리할 수 있다.
-  - 예: Brand 삭제 → Product 연쇄 삭제 (CatalogDomainService, 같은 트랜잭션)
+  - 예: Brand 삭제 → Product 연쇄 삭제 (BrandDeleteService, 같은 트랜잭션)
 - **다른 BC 간**: 현재는 Application Service가 같은 트랜잭션에서 조율한다. 규모 확장 시 이벤트 기반(eventual consistency)으로 전환을 검토한다.
 
 ---

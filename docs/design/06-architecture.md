@@ -146,12 +146,13 @@ BaseTimeEntity (id, createdAt, updatedAt)
 | Catalog | `Product` | Entity | 상품 CRUD, VO 위임 (`hasEnoughStock`, `decreaseStock`) |
 | Catalog | `Price` | VO (@Embeddable) | 가격 > 0 자체 검증 |
 | Catalog | `Stock` | VO (@Embeddable) | 재고 >= 0 자체 검증, `isEnough(Quantity)`, `decrease(Quantity)` |
-| Catalog | `CatalogDomainService` | Domain Service | 같은 BC 내 cross-aggregate 규칙 (Brand 삭제 → Product 연쇄, 상품 등록 시 Brand 검증) |
+| Catalog | `BrandDeleteService` | Domain Service | Brand 삭제 시 소속 Product 연쇄 soft-delete |
 | Catalog | `BrandRepository`, `ProductRepository` | interface | Catalog 조회/저장 계약 |
 | Like | `Like` | Entity | 관계 레코드 (hard-delete). `subjectType(enum) + subjectId(Long)` |
 | Like | `LikeRepository` | interface | 좋아요 조회/저장 계약 |
 | Order | `Order` | Entity | 주문 상태 관리, `isOwnedBy(memberId)` |
-| Order | `OrderLineSnapshot` | VO | 주문 시점 불변 스냅샷 (Price, Quantity 포함) |
+| Order | `OrderLine` | Entity | 주문 항목. productId, Quantity 보유. 라인별 확장 지점 |
+| Order | `OrderLineSnapshot` | VO (@Entity) | 주문 시점 불변 스냅샷 (Price 포함). 정규화를 위해 별도 테이블 |
 | Order | `Quantity` | VO (@Embeddable) | 수량 > 0 자체 검증 |
 | Order | `OrderRepository` | interface | 주문 조회/저장 계약 |
 
@@ -176,7 +177,7 @@ com.loopers
 │   │       ├── MemberName.java
 │   │       └── Email.java
 │   ├── catalog/
-│   │   ├── CatalogDomainService.java
+│   │   ├── BrandDeleteService.java
 │   │   ├── brand/
 │   │   │   ├── Brand.java
 │   │   │   ├── BrandRepository.java
@@ -195,6 +196,7 @@ com.loopers
 │   └── order/
 │       ├── Order.java
 │       ├── OrderRepository.java
+│       ├── OrderLine.java
 │       ├── OrderLineSnapshot.java
 │       ├── OrderStatus.java
 │       └── vo/
@@ -251,8 +253,8 @@ dependencies {
 |--------|-----|------|
 | `MemberService` | Member | 회원 등록, 조회, 비밀번호 변경 오케스트레이션 |
 | `BrandService` | Catalog | 활성 브랜드 목록 조회 (User) |
-| `AdminBrandService` | Catalog | 브랜드 CRUD. 삭제 시 CatalogDomainService 호출 |
-| `AdminProductService` | Catalog | 상품 등록 시 CatalogDomainService 호출 |
+| `AdminBrandService` | Catalog | 브랜드 CRUD. 삭제 시 BrandDeleteService 호출 |
+| `AdminProductService` | Catalog | 상품 CRUD. 등록 시 Brand 활성 여부 확인 |
 | `ProductService` | Catalog | 상품 조회, 수정, 삭제, 주문용 락 조회 |
 | `LikeService` | Like | 좋아요 등록/취소/조회. Cross-BC 유효성 확인 (ProductService 호출) |
 | `OrderService` | Order | 주문 생성 오케스트레이션 (정렬, 락, 스냅샷, 수락/거절) |
@@ -261,7 +263,7 @@ dependencies {
 
 | 종류      | 역할 | 네이밍 규칙 | 예시 |
 |---------|------|-----------|------|
-| Command | 외부 → Application 요청 (상태 변경) | `{Action}{Domain}Command` | `CreateBrandCommand`, `RegisterMemberCommand` |
+| Command | 외부 → Application 요청 (상태 변경) | `{Domain}{Action}Command` | `BrandCreateCommand`, `MemberRegisterCommand` |
 | Info    | Application → 외부 응답 (조회 결과) | `{Domain}Info` | `BrandInfo`, `MemberInfo` |
 
 > DTO는 Java `record`로 구현한다. 불변이며, HTTP 관심사(status code, header)를 알지 않는다.
@@ -283,7 +285,7 @@ Facade는 **Application Service 간 순환 참조를 해소**하기 위해서만
 |------|--------|----------------|
 | 위치 | Application 레이어 | Domain 레이어 |
 | 역할 | Application Service 간 순환 참조 해소 | 같은 BC 내 cross-aggregate 규칙 |
-| 예시 | (현재 해당 없음) | CatalogDomainService (Brand↔Product) |
+| 예시 | (현재 해당 없음) | BrandDeleteService (Brand 삭제 → Product 연쇄) |
 | 의존 | 여러 Application Service 주입 | 도메인 객체 + Repository |
 
 #### 패키지 구조
@@ -299,10 +301,10 @@ com.loopers.application
 │   ├── LikeService.java
 │   ├── OrderService.java
 │   └── dto/
-│       ├── CreateBrandCommand.java
-│       ├── UpdateBrandCommand.java
+│       ├── BrandCreateCommand.java
+│       ├── BrandUpdateCommand.java
 │       ├── BrandInfo.java
-│       ├── RegisterMemberCommand.java
+│       ├── MemberRegisterCommand.java
 │       ├── MemberInfo.java
 │       └── ...
 └── facade/
@@ -380,8 +382,8 @@ private HttpStatus toHttpStatus(ErrorType errorType) {
 
 | 레이어 | DTO 위치 | 역할 | 예시 |
 |--------|---------|------|------|
-| Presentation | `interfaces/api/{도메인}/dto/` | HTTP 계약 (Request Body, Response Body) | `CreateBrandApiRequest`, `BrandApiResponse` |
-| Application | `application/service/dto/` | Use Case 계약 (프로토콜 무관) | `CreateBrandCommand`, `BrandInfo` |
+| Presentation | `interfaces/api/{도메인}/dto/` | HTTP 계약 (Request Body, Response Body) | `BrandCreateApiRequest`, `BrandApiResponse` |
+| Application | `application/service/dto/` | Use Case 계약 (프로토콜 무관) | `BrandCreateCommand`, `BrandInfo` |
 
 > **왜 분리하는가?** Presentation DTO는 API 클라이언트와의 계약이고, Application DTO는 Use Case의 계약이다. 분리하면 API 스펙 변경이 Domain/Application에 영향을 주지 않고, 같은 Application을 다른 Presentation(Batch, Kafka)에서도 재사용할 수 있다.
 
@@ -552,7 +554,7 @@ graph TB
     subgraph CatalogBC["Catalog Context"]
         B["Brand\n(Aggregate Root)"]
         P["Product\n(Aggregate Root)"]
-        CDS["CatalogDomainService\n(cross-aggregate 규칙)"]
+        CDS["BrandDeleteService\n(Brand 삭제 + Product 연쇄)"]
         CDS ---|"조율"| B
         CDS ---|"조율"| P
     end
@@ -563,15 +565,17 @@ graph TB
 
     subgraph OrderBC["Order Context"]
         O["Order\n(Aggregate Root)"]
-        OLS["OrderLineSnapshot\n(VO, Composition)"]
-        O ---|"포함"| OLS
+        OL["OrderLine\n(Entity)"]
+        OLS["OrderLineSnapshot\n(VO, @Entity)"]
+        O ---|"포함"| OL
+        OL ---|"1:1"| OLS
     end
 
     P -..->|"brandId (Long)"| B
     L -..->|"memberId (Long)"| M
     L -..->|"subjectId (Long)"| P
     O -..->|"memberId (Long)"| M
-    OLS -..->|"productId (Long)"| P
+    OL -..->|"productId (Long)"| P
 ```
 
 **점선(`..>`) = ID(Long) 참조**. 객체 참조가 아니다.
@@ -582,7 +586,7 @@ BC 간 참조뿐 아니라 **같은 BC 내(Product → Brand)에서도 FK를 사
 
 | 이유 | 설명 |
 |------|------|
-| 도메인 규칙 명시적 제어 | 삭제 연쇄를 DB CASCADE 대신 CatalogDomainService로 제어. 삭제 순서(상품 먼저 → 브랜드 나중)와 부가 로직을 코드에 명시적으로 표현 |
+| 도메인 규칙 명시적 제어 | 삭제 연쇄를 DB CASCADE 대신 BrandDeleteService로 제어. 삭제 순서(상품 먼저 → 브랜드 나중)와 부가 로직을 코드에 명시적으로 표현 |
 | 운영 유연성 | 데이터 마이그레이션, 벌크 작업 시 FK가 제약이 됨 |
 
 참조 무결성은 **애플리케이션 레벨에서 보장**한다 (상세: `04-erd.md` 5절).
@@ -597,7 +601,7 @@ Brand와 Product는 같은 Catalog BC에 속하지만 **독립 Aggregate**이다
 | 규모 차이 | Brand 1개에 Product 수천 개 가능. Brand Aggregate에 포함하면 메모리/성능 문제 |
 | 독립 변경 | Product 가격/재고 수정 시 Brand를 잠글 필요 없음 |
 
-Cross-aggregate 규칙(삭제 연쇄, 생성 시 브랜드 검증)은 **CatalogDomainService**에서 처리한다.
+Cross-aggregate 규칙(삭제 연쇄)은 **BrandDeleteService**에서 처리한다. 상품 등록 시 Brand 활성 검증은 Application Service에서 오케스트레이션한다.
 
 ---
 
@@ -619,7 +623,7 @@ sequenceDiagram
     A->>CTRL: POST /api/admin/brands {name}
     Note over CTRL: Presentation DTO → Application Command 변환
 
-    CTRL->>SVC: create(CreateBrandCommand)
+    CTRL->>SVC: create(BrandCreateCommand)
     Note over SVC: @Transactional 시작
 
     SVC->>PORT: existsByName(name)
@@ -690,9 +694,9 @@ sequenceDiagram
             P->>STOCK: decrease(quantity)
             Note over STOCK: 새 Stock 반환 (불변 VO)
         end
-        OS->>PORT: save(ACCEPTED + snapshots)
+        OS->>PORT: save(ACCEPTED + lines + snapshots)
     else 재고 부족
-        OS->>PORT: save(REJECTED + snapshots)
+        OS->>PORT: save(REJECTED + lines + snapshots)
     end
 
     Note over OS: @Transactional 종료
@@ -757,7 +761,7 @@ flowchart TD
 | "재고는 음수가 될 수 없다" | `Stock` VO (Domain) | 기술 무관한 불변식 |
 | "가격은 0보다 커야 한다" | `Price` VO (Domain) | 기술 무관한 불변식 |
 | "이미 삭제된 브랜드는 다시 삭제 불가" | `Brand.guardNotDeleted()` (Domain) | 엔티티 자기 상태 검증 |
-| "Brand 삭제 시 Product 연쇄 삭제" | `CatalogDomainService` (Domain) | 같은 BC 내 cross-aggregate 규칙 |
+| "Brand 삭제 시 Product 연쇄 삭제" | `BrandDeleteService` (Domain) | 같은 BC 내 cross-aggregate 규칙 |
 | "productId 오름차순 정렬 (데드락 방지)" | `OrderService` (Application) | 물리적 기술 관심사 |
 | "좋아요 등록 시 상품 유효성 확인" | `LikeService` (Application) | Cross-BC 조율 (Like → Catalog) |
 | "ErrorType → HttpStatus 매핑" | `ApiControllerAdvice` (Presentation) | 프로토콜 해석 |
@@ -782,9 +786,9 @@ flowchart TD
 | 2 | ErrorType에 HttpStatus 미포함 | Presentation이 3개 (HTTP, Batch, Kafka) | Batch/Kafka에서 HttpStatus는 무의미. 각 Presentation이 자기 프로토콜로 해석해야 한다 | ErrorType에 HttpStatus 포함 |
 | 3 | Repository 인터페이스를 Domain에 배치 | 의존 역전 | Domain이 추상체를 소유하고 Infrastructure가 구현하면 의존 방향이 안쪽을 향한다. 테스트 시 Fake 주입 가능 | Repository를 Infrastructure에 배치 |
 | 4 | Application에 spring-web 미포함 | Application의 프로토콜 독립성 | 트랜잭션(`@Transactional`)과 DI(`@Service`)만 필요. HTTP는 Presentation의 책임 | spring-web 포함 |
-| 5 | BC 간/내 모두 FK 없음 | 도메인 규칙 명시적 제어 | 삭제 연쇄를 DB CASCADE 대신 CatalogDomainService로 제어. 규칙이 코드에 표현된다 | FK 사용 |
+| 5 | BC 간/내 모두 FK 없음 | 도메인 규칙 명시적 제어 | 삭제 연쇄를 DB CASCADE 대신 BrandDeleteService로 제어. 규칙이 코드에 표현된다 | FK 사용 |
 | 6 | BaseTimeEntity / BaseEntity 분리 | 삭제 정책을 상속으로 표현 | Like(hard-delete), Order(삭제 없음)에 `deletedAt`은 불필요. 상속이 의도를 코드로 드러낸다 | BaseEntity 하나만 |
-| 7 | Domain Service 필요할 때만 도입 | YAGNI | 현재 CatalogDomainService만 실제 필요. Member BC에 DomainService는 불필요 | 모든 BC에 미리 생성 |
+| 7 | Domain Service 필요할 때만 도입 | YAGNI | 현재 BrandDeleteService만 실제 필요. Member BC에 DomainService는 불필요 | 모든 BC에 미리 생성 |
 | 8 | presentation에서만 Spring Boot 플러그인 | Library 모듈에 bootJar 불필요 | domain, application, modules는 `java-library`. bootJar는 실행 모듈(presentation)만 | 전체 모듈에 적용 |
 
 ---

@@ -144,9 +144,9 @@ Application 레이어의 `@Configuration` 클래스에서 `@Bean`으로 등록�
 @Configuration
 public class DomainServiceConfig {
     @Bean
-    public CatalogDomainService catalogDomainService(
+    public BrandDeleteService brandDeleteService(
             BrandRepository brandRepo, ProductRepository productRepo) {
-        return new CatalogDomainService(brandRepo, productRepo);
+        return new BrandDeleteService(brandRepo, productRepo);
     }
 }
 ```

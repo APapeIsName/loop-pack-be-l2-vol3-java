@@ -1,8 +1,8 @@
 package com.loopers.interfaces.api.member;
 
 import com.loopers.application.service.MemberService;
-import com.loopers.application.service.dto.RegisterMemberCommand;
-import com.loopers.application.service.dto.UpdatePasswordCommand;
+import com.loopers.application.service.dto.MemberRegisterCommand;
+import com.loopers.application.service.dto.PasswordUpdateCommand;
 import com.loopers.interfaces.api.member.dto.MemberApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -17,7 +17,7 @@ public class MemberController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    public void register(@RequestBody RegisterMemberCommand request) {
+    public void register(@RequestBody MemberRegisterCommand request) {
         memberService.register(request);
     }
 
@@ -34,7 +34,7 @@ public class MemberController {
     public void updatePassword(
             @RequestHeader("X-Loopers-LoginId") String loginId,
             @RequestHeader("X-Loopers-LoginPw") String currentPassword,
-            @RequestBody UpdatePasswordCommand request
+            @RequestBody PasswordUpdateCommand request
     ) {
         memberService.updatePassword(loginId, currentPassword, request.newPassword());
     }

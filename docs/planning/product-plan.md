@@ -191,23 +191,23 @@ public class Product extends BaseEntity {
 ### 2-4. Brand와의 관계: `brandId` (FK only)
 
 - Product는 `brandId`만 가진다 (JPA `@ManyToOne` 연관관계 사용하지 않음).
-- Brand 유효성 검증은 CatalogDomainService(Domain 레이어)에서 수행한다.
-- 이유: Brand와 Product는 같은 BC(Catalog)의 독립 Aggregate. cross-aggregate 규칙은 Domain Service가 담당한다.
+- Brand 활성 여부 확인은 AdminProductService(Application 레이어)에서 오케스트레이션한다.
+- 이유: Brand 활성 검증은 상품 등록의 사전 조건이지 독립적 도메인 규칙이 아니다.
 
 ### 2-5. DTO 분리 구조
 
 ```
 Presentation Layer (commerce-api)
 ├── interfaces/api/product/dto/
-│   ├── CreateProductApiRequest.java    → CreateProductCommand 변환
-│   ├── UpdateProductApiRequest.java    → UpdateProductCommand 변환
+│   ├── ProductCreateApiRequest.java    → ProductCreateCommand 변환
+│   ├── ProductUpdateApiRequest.java    → ProductUpdateCommand 변환
 │   ├── ProductApiResponse.java         ← ProductInfo 변환
 │   └── ProductListApiResponse.java     ← ProductSummary 변환
 │
 Application Layer (commerce-service)
 ├── application/service/dto/
-│   ├── CreateProductCommand.java       (record)
-│   ├── UpdateProductCommand.java       (record)
+│   ├── ProductCreateCommand.java       (record)
+│   ├── ProductUpdateCommand.java       (record)
 │   ├── ProductInfo.java                (record, from(Product))
 │   └── ProductSummary.java             (record, 목록용 간략 정보)
 ```
@@ -260,30 +260,19 @@ public long softDeleteByBrandId(Long brandId) {
 }
 ```
 
-### 2-7. CatalogDomainService (cross-aggregate 규칙)
+### 2-7. BrandDeleteService (cross-aggregate 규칙)
 
-Brand와 Product는 같은 BC(Catalog)의 독립 Aggregate. cross-aggregate 규칙은 **CatalogDomainService**(Domain 레이어)에서 처리한다.
+Brand 삭제 시 소속 Product 연쇄 soft-delete는 **BrandDeleteService**(Domain 레이어)에서 처리한다. 상품 등록 시 Brand 활성 검증은 AdminProductService(Application)에서 오케스트레이션한다.
 
-> 파일: `domain/src/main/java/com/loopers/domain/catalog/CatalogDomainService.java`
+> 파일: `domain/src/main/java/com/loopers/domain/catalog/BrandDeleteService.java`
 
 ```java
 @RequiredArgsConstructor
-public class CatalogDomainService {
+public class BrandDeleteService {
     private final BrandRepository brandRepository;
     private final ProductRepository productRepository;
 
-    // 상품 생성 시 브랜드 검증
-    public Product createProduct(Long brandId, String name, int price, int stock, String description) {
-        Brand brand = brandRepository.findById(brandId)
-            .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
-                BrandExceptionMessage.NOT_FOUND.message()));
-        brand.guardNotDeleted();
-        Product product = Product.create(brandId, name, price, stock, description);
-        return productRepository.save(product);
-    }
-
-    // 브랜드 삭제 + 소속 상품 연쇄 삭제
-    public void deleteBrand(Long brandId) {
+    public void delete(Long brandId) {
         Brand brand = brandRepository.findById(brandId)
             .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
                 BrandExceptionMessage.NOT_FOUND.message()));
@@ -293,7 +282,7 @@ public class CatalogDomainService {
 }
 ```
 
-호출 규칙: Application Service → CatalogDomainService. Controller 직접 호출 금지 (트랜잭션 보장).
+호출 규칙: Application Service → BrandDeleteService. Controller 직접 호출 금지 (트랜잭션 보장).
 
 ### 2-8. 향후 Domain Service 도입 후보
 
@@ -414,12 +403,12 @@ public interface ProductRepository {
 - `getActiveProduct(Long id)` — 활성 상품 단건 조회
 
 **AdminProductService** (Admin):
-- `create(CreateProductCommand)` — 생성
+- `create(ProductCreateCommand)` — 생성
 - `getById(Long)` — 단건 조회 (삭제 포함)
 - `getAll()` — 전체 목록 조회
-- `update(Long, UpdateProductCommand)` — 수정
+- `update(Long, ProductUpdateCommand)` — 수정
 - `delete(Long)` — soft-delete
-- `softDeleteByBrandId(Long)` — 벌크 삭제 (CatalogDomainService에서 호출)
+- `softDeleteByBrandId(Long)` — 벌크 삭제 (BrandDeleteService에서 호출)
 
 ### Step 9: Repository Adapter (QueryDSL)
 
@@ -441,27 +430,23 @@ QueryDSL 구현:
 - `GET /api/products/{id}` → `ProductService.getActiveProduct()`
 
 **AdminProductController**:
-- `POST /api/admin/products` → `AdminProductService.create()` (CatalogDomainService.createProduct() 경유)
+- `POST /api/admin/products` → `AdminProductService.create()` (Brand 활성 확인 후 생성)
 - `GET /api/admin/products/{id}` → `AdminProductService.getById()`
 - `GET /api/admin/products` → `AdminProductService.getAll()`
 - `PUT /api/admin/products/{id}` → `AdminProductService.update()`
 - `DELETE /api/admin/products/{id}` → `AdminProductService.delete()`
 
-### Step 11: CatalogDomainService (cross-aggregate 규칙)
+### Step 11: BrandDeleteService (cross-aggregate 규칙)
 
-> 파일: `domain/src/main/java/com/loopers/domain/catalog/CatalogDomainService.java`
-> 테스트: `domain/src/test/java/com/loopers/domain/catalog/CatalogDomainServiceTest.java`
-
-테스트 케이스 (상품 생성 시 브랜드 검증):
-- 브랜드가 존재하고 활성 상태면 상품 생성 성공
-- 브랜드가 없으면 NOT_FOUND 예외
-- 브랜드가 삭제 상태면 BAD_REQUEST 예외
+> 파일: `domain/src/main/java/com/loopers/domain/catalog/BrandDeleteService.java`
+> 테스트: `domain/src/test/java/com/loopers/domain/catalog/BrandDeleteServiceTest.java`
 
 테스트 케이스 (브랜드 삭제 연쇄):
 - 브랜드 삭제 시 소속 상품도 soft-delete
 - 소속 상품이 없어도 브랜드 삭제 정상 수행
+- 존재하지 않는 브랜드 삭제 시 NOT_FOUND 예외
 
-> **주의**: Brand 계획서의 AdminBrandController DELETE 엔드포인트가 CatalogDomainService.deleteBrand()을 경유하도록 교체
+> **주의**: Brand 계획서의 AdminBrandController DELETE 엔드포인트가 BrandDeleteService.delete()를 경유하도록 교체
 
 ### Step 13: Cascade 통합 테스트
 
@@ -506,8 +491,8 @@ QueryDSL 구현:
 | `domain/src/test/java/com/loopers/domain/product/vo/StockTest.java` | Stock VO 테스트 |
 | `domain/src/test/java/com/loopers/domain/product/vo/QuantityTest.java` | Quantity VO 테스트 |
 | `domain/src/testFixtures/java/com/loopers/domain/product/ProductFixture.java` | Fixture |
-| `domain/src/main/java/com/loopers/domain/catalog/CatalogDomainService.java` | Catalog BC Domain Service |
-| `domain/src/test/java/com/loopers/domain/catalog/CatalogDomainServiceTest.java` | Domain Service 테스트 |
+| `domain/src/main/java/com/loopers/domain/catalog/BrandDeleteService.java` | Brand 삭제 Domain Service |
+| `domain/src/test/java/com/loopers/domain/catalog/BrandDeleteServiceTest.java` | Domain Service 테스트 |
 
 ### Application Layer (`application/commerce-service/`)
 
@@ -515,8 +500,8 @@ QueryDSL 구현:
 |------|------|
 | `application/commerce-service/src/main/java/com/loopers/application/service/ProductService.java` | User Service |
 | `application/commerce-service/src/main/java/com/loopers/application/service/AdminProductService.java` | Admin Service |
-| `application/commerce-service/src/main/java/com/loopers/application/service/dto/CreateProductCommand.java` | 생성 DTO |
-| `application/commerce-service/src/main/java/com/loopers/application/service/dto/UpdateProductCommand.java` | 수정 DTO |
+| `application/commerce-service/src/main/java/com/loopers/application/service/dto/ProductCreateCommand.java` | 생성 DTO |
+| `application/commerce-service/src/main/java/com/loopers/application/service/dto/ProductUpdateCommand.java` | 수정 DTO |
 | `application/commerce-service/src/main/java/com/loopers/application/service/dto/ProductInfo.java` | 상세 응답 DTO |
 | `application/commerce-service/src/main/java/com/loopers/application/service/dto/ProductSummary.java` | 목록 응답 DTO |
 | `application/commerce-service/src/test/java/com/loopers/application/service/ProductServiceTest.java` | User Service 테스트 |
@@ -528,8 +513,8 @@ QueryDSL 구현:
 |------|------|
 | `presentation/commerce-api/src/main/java/com/loopers/interfaces/api/product/ProductController.java` | User Controller |
 | `presentation/commerce-api/src/main/java/com/loopers/interfaces/api/product/AdminProductController.java` | Admin Controller |
-| `presentation/commerce-api/src/main/java/com/loopers/interfaces/api/product/dto/CreateProductApiRequest.java` | Presentation 생성 DTO |
-| `presentation/commerce-api/src/main/java/com/loopers/interfaces/api/product/dto/UpdateProductApiRequest.java` | Presentation 수정 DTO |
+| `presentation/commerce-api/src/main/java/com/loopers/interfaces/api/product/dto/ProductCreateApiRequest.java` | Presentation 생성 DTO |
+| `presentation/commerce-api/src/main/java/com/loopers/interfaces/api/product/dto/ProductUpdateApiRequest.java` | Presentation 수정 DTO |
 | `presentation/commerce-api/src/main/java/com/loopers/interfaces/api/product/dto/ProductApiResponse.java` | Presentation 상세 응답 DTO |
 | `presentation/commerce-api/src/main/java/com/loopers/interfaces/api/product/dto/ProductListApiResponse.java` | Presentation 목록 응답 DTO |
 | `presentation/commerce-api/src/test/java/com/loopers/controller/ProductE2ETest.java` | E2E 테스트 |

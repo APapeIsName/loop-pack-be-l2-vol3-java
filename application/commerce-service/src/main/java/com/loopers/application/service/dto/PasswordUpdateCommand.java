@@ -1,6 +1,6 @@
 package com.loopers.application.service.dto;
 
-public record UpdatePasswordCommand(
+public record PasswordUpdateCommand(
         String newPassword
 ) {
 }

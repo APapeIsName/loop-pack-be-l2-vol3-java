@@ -7,6 +7,7 @@ import com.loopers.domain.member.vo.MemberName;
 import java.time.LocalDate;
 
 public record MemberInfo(
+        Long memberId,
         LoginId loginId,
         MemberName name,
         LocalDate birthdate,

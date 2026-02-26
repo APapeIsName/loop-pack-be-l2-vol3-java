@@ -14,7 +14,7 @@
 3. [도메인 정의 작업](#3-도메인-정의-작업) (2026-02-10)
 4. [Brand 도메인 분석 — Soft Delete vs Hard Delete](#4-brand-도메인-분석--soft-delete-vs-hard-delete) (2026-02-12)
 5. [Brand & Product BC 설계](#5-brand--product-bc-설계) (2026-02-22)
-6. [Facade에서 CatalogDomainService로의 전환](#6-facade에서-catalogdomainservice로의-전환) (2026-02-22)
+6. [Facade에서 BrandDeleteService로의 전환](#6-facade에서-branddeleteservice로의-전환) (2026-02-22)
 7. [아키텍처 설계서 작성 논의](#7-아키텍처-설계서-작성-논의) (2026-02-22~23)
 8. [핵심 설계 결정 요약](#8-핵심-설계-결정-요약)
 9. [Member DIP 리팩토링](#9-member-dip-리팩토링) (2026-02-24)
@@ -233,12 +233,12 @@ Soft Delete 채택 (`BaseEntity.deletedAt` 활용):
 
 **FK 제약조건 없음:**
 - 같은 BC 내부(product.brand_id → brand.id)에도 FK 없음
-- 삭제 연쇄를 DB CASCADE가 아닌 `CatalogDomainService`로 명시적 제어
+- 삭제 연쇄를 DB CASCADE가 아닌 `BrandDeleteService`로 명시적 제어
 - 규칙이 코드에 표현되어 추적 가능
 
 ---
 
-## 6. Facade에서 CatalogDomainService로의 전환
+## 6. Facade에서 BrandDeleteService로의 전환
 
 > 세션일: 2026-02-22
 
@@ -266,25 +266,24 @@ Brand 삭제 → Product 연쇄 삭제는:
 - **도메인 규칙** ("브랜드가 폐점하면 소속 상품도 비활성화")
 - 기술적 조율이 아닌 **비즈니스 규칙**
 
-따라서 Facade가 아닌 **CatalogDomainService**가 적합.
+따라서 Facade가 아닌 **BrandDeleteService**가 적합.
 
 ### 6-3. 전환 결과
 
 **변경 후:**
 ```
-AdminBrandController → AdminBrandService → CatalogDomainService
+AdminBrandController → AdminBrandService → BrandDeleteService
                                             ├── BrandRepository
                                             └── ProductRepository
 ```
 
-**CatalogDomainService의 책임:**
+**BrandDeleteService의 책임:**
 - Brand 삭제 시 소속 Product 연쇄 soft-delete
-- Product 생성 시 Brand 활성 여부 검증
 
 **반영 문서:**
-- `02-sequence-diagrams.md` 5-3절: AdminProductFacade → CatalogDomainService
+- `02-sequence-diagrams.md` 5-3절: AdminProductFacade → BrandDeleteService
 - `03-class-diagram.md` 4절: Facade 테이블 → Domain Service 테이블
-- `brand-plan.md` 2-5절: CatalogDomainService 설계
+- `brand-plan.md` 2-5절: BrandDeleteService 설계
 - `05-domain-model.md` 4-3절: Domain Service vs Facade 구분
 
 ---
@@ -341,7 +340,7 @@ domain/src/main/java/com/loopers/domain/
 │   │   ├── Product.java
 │   │   ├── ProductRepository.java
 │   │   └── ProductExceptionMessage.java
-│   └── CatalogDomainService.java
+│   └── BrandDeleteService.java
 ├── member/
 ├── like/
 └── order/
@@ -383,7 +382,7 @@ Infrastructure: Repository 구현체, JPA Config
 | `MemberInfo` | `MemberQuery` | `MemberQuery.from(Member member)` |
 
 **네이밍 컨벤션:**
-- 요청 DTO: **Command** (`CreateBrandCommand`, `UpdateBrandCommand`)
+- 요청 DTO: **Command** (`BrandCreateCommand`, `BrandUpdateCommand`)
 - 응답 DTO: **Query** (`BrandQuery`)
 
 ### 7-6. Port-Adapter → Repository 추상체/구현체
@@ -462,7 +461,7 @@ public void decreaseStock(Quantity quantity) {
 
 | 상황 | 트랜잭션 전략 | 예시 |
 |------|-------------|------|
-| 같은 BC, cross-aggregate | **같은 트랜잭션** | Brand 삭제 → Product 연쇄 (CatalogDomainService) |
+| 같은 BC, cross-aggregate | **같은 트랜잭션** | Brand 삭제 → Product 연쇄 (BrandDeleteService) |
 | 다른 BC (모놀리스) | **같은 트랜잭션** (실용적) | 주문 생성 → 재고 차감 (OrderService에서 조율) |
 | 다른 BC (규모 확장 시) | 이벤트 기반 (eventual consistency) | 현재 해당 없음 |
 
@@ -508,7 +507,7 @@ public void decreaseStock(Quantity quantity) {
 |------|--------|-------|------|
 | Phase 2 | `MemberPolicy` 분리 | Entity/VO 내재화 | 응집도 향상, 코드 위치 근접성 |
 | Phase 2 | `DomainException` hierarchy | `ErrorType` pure enum | 간결, 해석 자유도 |
-| 설계 단계 | `AdminBrandFacade` | `CatalogDomainService` | 같은 BC = Domain Service |
+| 설계 단계 | `AdminBrandFacade` | `BrandDeleteService` | 같은 BC = Domain Service |
 | 설계 단계 | `ProductLike` (Catalog BC) | `Like` (독립 BC) | 확장성, 책임 분리 |
 | 문서 단계 | `BrandInfo` (DTO) | `BrandQuery` (DTO) | 의미론적 명확성 |
 | 문서 단계 | Port / Adapter | Repository 추상체 / 구현체 | 레이어드 아키텍처 용어 통일 |
@@ -649,19 +648,19 @@ Presentation: MemberApiResponse.from(MemberInfo)               ← String 변환
 
 | 방향 | 패턴 | 예시 |
 |------|------|------|
-| Inbound (상태 변경) | `{Action}{Domain}Command` | `RegisterMemberCommand`, `CreateBrandCommand` |
+| Inbound (상태 변경) | `{Domain}{Action}Command` | `MemberRegisterCommand`, `BrandCreateCommand` |
 | Outbound (조회 결과) | `{Domain}Info` | `MemberInfo`, `BrandInfo` |
 
 **Presentation Layer:**
 
 | 방향 | 패턴 | 예시 |
 |------|------|------|
-| Inbound (Request Body) | `{Action}{Domain}ApiRequest` | `RegisterMemberApiRequest`, `CreateBrandApiRequest` |
+| Inbound (Request Body) | `{Domain}{Action}ApiRequest` | `MemberRegisterApiRequest`, `BrandCreateApiRequest` |
 | Outbound (Response Body) | `{Domain}ApiResponse` | `MemberApiResponse`, `BrandApiResponse` |
 
 **변환 흐름:**
 ```
-HTTP Request → {Action}{Domain}ApiRequest.toCommand() → {Action}{Domain}Command
+HTTP Request → {Domain}{Action}ApiRequest.toCommand() → {Domain}{Action}Command
 {Domain}Info → {Domain}ApiResponse.from({Domain}Info) → HTTP Response
 ```
 
@@ -669,8 +668,8 @@ HTTP Request → {Action}{Domain}ApiRequest.toCommand() → {Action}{Domain}Comm
 
 | Before | After |
 |--------|-------|
-| `RegisterMemberRequest` | `RegisterMemberCommand` |
-| `UpdatePasswordRequest` | `UpdatePasswordCommand` |
+| `RegisterMemberRequest` | `MemberRegisterCommand` |
+| `UpdatePasswordRequest` | `PasswordUpdateCommand` |
 | `GetMemberInfoResponse` | `MemberInfo` |
 | `GetMemberInfoApiResponse` | `MemberApiResponse` |
 

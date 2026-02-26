@@ -1,8 +1,8 @@
 package com.loopers.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.loopers.application.service.dto.RegisterMemberCommand;
-import com.loopers.application.service.dto.UpdatePasswordCommand;
+import com.loopers.application.service.dto.MemberRegisterCommand;
+import com.loopers.application.service.dto.PasswordUpdateCommand;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,7 +36,7 @@ public class MemberE2ETest {
     @DisplayName("회원가입 성공 시 201 Created를 반환한다")
     void 회원가입_성공() throws Exception {
         // given
-        RegisterMemberCommand request = createRegisterRequest();
+        MemberRegisterCommand request = createRegisterRequest();
 
         // when & then
         mockMvc.perform(post("/api/members/register")
@@ -69,7 +69,7 @@ public class MemberE2ETest {
                         .header("X-Loopers-LoginId", LOGIN_ID)
                         .header("X-Loopers-LoginPw", INITIAL_PW)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new UpdatePasswordCommand(NEW_PW))))
+                        .content(objectMapper.writeValueAsString(new PasswordUpdateCommand(NEW_PW))))
                 .andExpect(status().isNoContent());
     }
 
@@ -101,8 +101,8 @@ public class MemberE2ETest {
                 .andExpect(status().isUnauthorized());
     }
 
-    private RegisterMemberCommand createRegisterRequest() {
-        return new RegisterMemberCommand(
+    private MemberRegisterCommand createRegisterRequest() {
+        return new MemberRegisterCommand(
                 LOGIN_ID, INITIAL_PW, "공명선", LocalDate.of(2001, 2, 9), "test@loopers.com"
         );
     }
@@ -118,6 +118,6 @@ public class MemberE2ETest {
                 .header("X-Loopers-LoginId", LOGIN_ID)
                 .header("X-Loopers-LoginPw", INITIAL_PW)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(new UpdatePasswordCommand(NEW_PW))));
+                .content(objectMapper.writeValueAsString(new PasswordUpdateCommand(NEW_PW))));
     }
 }

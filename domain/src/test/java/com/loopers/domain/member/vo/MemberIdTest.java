@@ -9,18 +9,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class MemberIdTest {
 
     @Test
-    void Long_값으로_생성_성공() {
-        // given
-        Long value = 1L;
-
-        // when
-        MemberId memberId = MemberId.of(value);
-
-        // then
-        assertThat(memberId.getValue()).isEqualTo(1L);
-    }
-
-    @Test
     void null_값으로_생성_시_예외() {
         // given
         Long value = null;

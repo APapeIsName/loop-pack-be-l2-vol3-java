@@ -1,7 +1,7 @@
 package com.loopers.application;
 
 import com.loopers.application.service.MemberService;
-import com.loopers.application.service.dto.RegisterMemberCommand;
+import com.loopers.application.service.dto.MemberRegisterCommand;
 import com.loopers.application.service.dto.MemberInfo;
 import com.loopers.domain.member.MemberExceptionMessage;
 import com.loopers.domain.member.MemberRepository;
@@ -35,7 +35,7 @@ class MemberServiceIntegrationTest {
     private static final LocalDate BIRTH_DATE = LocalDate.of(2001, 2, 9);
 
     private void 회원을_등록한다(String loginId, String password) {
-        memberService.register(new RegisterMemberCommand(
+        memberService.register(new MemberRegisterCommand(
                 loginId, password, "공명선", BIRTH_DATE, "test@loopers.com"));
     }
 
@@ -43,7 +43,7 @@ class MemberServiceIntegrationTest {
     void 회원가입_성공() {
         // given
         String inputId = "integrationId123";
-        RegisterMemberCommand request = new RegisterMemberCommand(
+        MemberRegisterCommand request = new MemberRegisterCommand(
                 inputId, "Pass!1234", "공명선", BIRTH_DATE, "test@loopers.com");
 
         // when
@@ -59,7 +59,7 @@ class MemberServiceIntegrationTest {
         String duplicateId = "existingId";
         회원을_등록한다(duplicateId, "encodedPw1!");
 
-        RegisterMemberCommand request = new RegisterMemberCommand(
+        MemberRegisterCommand request = new MemberRegisterCommand(
                 duplicateId, "NewPass!123", "신규유저", LocalDate.of(2000, 1, 1), "new@test.com");
 
         // when & then
@@ -143,7 +143,7 @@ class MemberServiceIntegrationTest {
 
         // then
         assertThat(memberRepository.findByLoginId(loginId).orElseThrow()
-                .getPassword().matches(newPw, passwordEncryptor)
+                .matchesPassword(newPw, passwordEncryptor)
         ).isTrue();
     }
 

@@ -11,7 +11,7 @@
 OrderService → ProductService (주문 시 재고 확인/차감)
 LikeService → ProductService (좋아요 시 상품/브랜드 유효성 확인)
 BrandService ↔ ProductService (같은 BC 내 cross-aggregate 규칙)
-  → CatalogDomainService로 해소 (Domain 레이어, Brand↔Product는 같은 Catalog BC)
+  → BrandDeleteService로 해소 (Domain 레이어, Brand↔Product는 같은 Catalog BC)
 ```
 
 ---
@@ -203,9 +203,9 @@ sequenceDiagram
         loop 각 상품
             OS->>P: 재고 차감 decreaseStock(quantity)
         end
-        OS->>OR: 수락 주문 저장 save(order: ACCEPTED, snapshots)
+        OS->>OR: 수락 주문 저장 save(order: ACCEPTED, lines + snapshots)
     else 하나라도 재고 부족
-        OS->>OR: 거절 주문 저장 save(order: REJECTED, snapshots)
+        OS->>OR: 거절 주문 저장 save(order: REJECTED, lines + snapshots)
     end
 
     OS-->>C: 주문 결과
@@ -257,8 +257,8 @@ sequenceDiagram
 
     M->>C: GET /api/v1/orders/{orderId}
     C->>OS: 주문 상세 조회 getOrderDetail(memberId, orderId)
-    OS->>OR: 주문 + 스냅샷 조회 findWithSnapshotsById(orderId)
-    OR-->>OS: Order + List<OrderLineSnapshot>
+    OS->>OR: 주문 + 주문항목 + 스냅샷 조회 findWithLinesById(orderId)
+    OR-->>OS: Order + OrderLines + Snapshots
 
     OS->>O: 본인 확인 isOwnedBy(memberId)
     Note over O: 본인 주문이 아니면 예외
@@ -269,7 +269,7 @@ sequenceDiagram
 
 #### 읽는 포인트
 - **Order 엔티티**: `isOwnedBy(memberId)` — 본인 확인은 Order 객체 스스로가 판단한다. Service가 memberId를 비교하는 것이 아니다.
-- **OrderRepository**: 주문과 스냅샷을 함께 로딩하는 책임.
+- **OrderRepository**: 주문, 주문항목, 스냅샷을 함께 로딩하는 책임.
 
 ---
 
@@ -369,27 +369,27 @@ sequenceDiagram
 
 ### 4-5. 브랜드 삭제 (연쇄 soft-delete)
 
-> Brand와 Product는 같은 Catalog BC. cross-aggregate 규칙은 CatalogDomainService(Domain 레이어)에서 처리한다.
+> Brand와 Product는 같은 Catalog BC. Brand 삭제 시 소속 Product 연쇄 삭제는 BrandDeleteService(Domain 레이어)에서 처리한다.
 
 ```mermaid
 sequenceDiagram
     actor A as 관리자
     participant C as AdminBrandController
     participant BS as AdminBrandService
-    participant CDS as CatalogDomainService
+    participant BDS as BrandDeleteService
     participant BR as BrandRepository
     participant PR as ProductRepository
     participant B as Brand
 
     A->>C: DELETE /api/v1/admin/brands/{brandId}
-    C->>BS: 브랜드 삭제 deleteBrand(brandId)
+    C->>BS: 브랜드 삭제 delete(brandId)
 
-    BS->>CDS: 브랜드 삭제 deleteBrand(brandId)
-    CDS->>BR: 브랜드 조회 findById(brandId)
-    BR-->>CDS: Brand
+    BS->>BDS: 브랜드 삭제 delete(brandId)
+    BDS->>BR: 브랜드 조회 findById(brandId)
+    BR-->>BDS: Brand
 
-    CDS->>PR: 소속 상품 연쇄 삭제 softDeleteByBrandId(brandId)
-    CDS->>B: 삭제 delete()
+    BDS->>PR: 소속 상품 연쇄 삭제 softDeleteByBrandId(brandId)
+    BDS->>B: 삭제 delete()
     Note over B: guardNotDeleted() + name 변경<br/>+ deletedAt 세팅 (UNIQUE 해소)
 
     BS-->>C: 삭제 완료
@@ -397,8 +397,8 @@ sequenceDiagram
 ```
 
 #### 읽는 포인트
-- **CatalogDomainService**: 같은 BC(Catalog) 내 cross-aggregate 규칙 처리. 삭제 순서(상품 먼저 → 브랜드 나중)는 도메인 규칙.
-- **AdminBrandService**: 트랜잭션 경계 소유. CatalogDomainService를 호출하는 Application 조정자.
+- **BrandDeleteService**: 같은 BC(Catalog) 내 cross-aggregate 규칙 처리. 삭제 순서(상품 먼저 → 브랜드 나중)는 도메인 규칙.
+- **AdminBrandService**: 트랜잭션 경계 소유. BrandDeleteService를 호출하는 Application 조정자.
 - **Brand 엔티티**: `delete()` 내부에서 `guardNotDeleted()` + name 변경 + deletedAt 세팅을 스스로 수행한다.
 
 ---
@@ -447,43 +447,39 @@ sequenceDiagram
 
 ### 5-3. 상품 등록
 
-> Brand와 Product는 같은 Catalog BC. 상품 등록 시 브랜드 검증은 CatalogDomainService(Domain 레이어)에서 처리한다.
+> 상품 등록 시 Brand 활성 여부 확인은 AdminProductService(Application 레이어)에서 오케스트레이션한다.
 
 ```mermaid
 sequenceDiagram
     actor A as 관리자
     participant C as AdminProductController
     participant PS as AdminProductService
-    participant CDS as CatalogDomainService
     participant BR as BrandRepository
     participant B as Brand
     participant P as Product
     participant PR as ProductRepository
 
     A->>C: POST /api/v1/admin/products {name, description, price, stock, brandId}
-    C->>PS: 상품 등록 createProduct(name, description, price, stock, brandId)
+    C->>PS: 상품 등록 create(BrandCreateCommand)
 
-    PS->>CDS: 상품 생성 createProduct(brandId, name, price, stock, description)
-    CDS->>BR: 브랜드 조회 findById(brandId)
-    BR-->>CDS: Brand
+    PS->>BR: 브랜드 조회 findById(brandId)
+    BR-->>PS: Brand
 
-    CDS->>B: 삭제 여부 확인 guardNotDeleted()
+    PS->>B: 삭제 여부 확인
     Note over B: 삭제된 브랜드면 예외
 
-    CDS->>P: 생성 Product.create(brandId, name, price, stock, description)
+    PS->>P: 생성 Product.register(name, description, price, stock, brandId)
     Note over P: 가격 > 0, 재고 >= 0 검증
-    CDS->>PR: 상품 저장 save(product)
-    PR-->>CDS: Product
-    CDS-->>PS: Product
+    PS->>PR: 상품 저장 save(product)
+    PR-->>PS: Product
 
     PS-->>C: ProductInfo
     C-->>A: 201 Created
 ```
 
 #### 읽는 포인트
-- **CatalogDomainService**: 같은 BC(Catalog) 내 cross-aggregate 규칙 처리. 브랜드 검증 → 상품 생성 순서는 도메인 규칙.
-- **AdminProductService**: 트랜잭션 경계 소유. CatalogDomainService를 호출하는 Application 조정자.
-- **Brand 엔티티**: `guardNotDeleted()` — 삭제된 브랜드에 상품을 등록할 수 없다는 불변식을 Brand 스스로가 지킨다.
+- **AdminProductService**: 트랜잭션 경계 소유. Brand 조회 → 활성 확인 → Product 생성의 오케스트레이션.
+- **Brand 엔티티**: 삭제 여부는 Brand 자신의 상태. Application Service가 조회 후 확인한다.
 - **Product 엔티티**: 생성 시 입력값 검증(가격 > 0, 재고 >= 0)을 스스로 수행한다.
 
 ---
@@ -577,8 +573,8 @@ sequenceDiagram
 
     A->>C: GET /api/v1/admin/orders/{orderId}
     C->>OS: 주문 상세 조회 getOrderDetail(orderId)
-    OS->>OR: 주문 + 스냅샷 조회 findWithSnapshotsById(orderId)
-    OR-->>OS: Order + List<OrderLineSnapshot>
+    OS->>OR: 주문 + 주문항목 + 스냅샷 조회 findWithLinesById(orderId)
+    OR-->>OS: Order + OrderLines + Snapshots
     OS-->>C: OrderDetailInfo
     C-->>A: 200 OK
 ```

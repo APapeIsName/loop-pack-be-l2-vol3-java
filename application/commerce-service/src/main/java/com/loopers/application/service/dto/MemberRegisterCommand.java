@@ -2,7 +2,7 @@ package com.loopers.application.service.dto;
 
 import java.time.LocalDate;
 
-public record RegisterMemberCommand(
+public record MemberRegisterCommand(
         String loginId,
         String password,
         String name,

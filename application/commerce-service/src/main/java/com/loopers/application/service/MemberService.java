@@ -1,6 +1,6 @@
 package com.loopers.application.service;
 
-import com.loopers.application.service.dto.RegisterMemberCommand;
+import com.loopers.application.service.dto.MemberRegisterCommand;
 import com.loopers.application.service.dto.MemberInfo;
 import com.loopers.domain.member.Member;
 import com.loopers.domain.member.MemberExceptionMessage;
@@ -21,7 +21,7 @@ public class MemberService {
     private final PasswordEncryptor passwordEncryptor;
 
     @Transactional
-    public void register(RegisterMemberCommand request) {
+    public void register(MemberRegisterCommand request) {
         boolean isLoginIdAlreadyExists = memberRepository.existsByLoginId(request.loginId());
 
         if (isLoginIdAlreadyExists) {
@@ -43,11 +43,12 @@ public class MemberService {
         Member member = memberRepository.findByLoginId(userId)
                 .orElseThrow(() -> new CoreException(ErrorType.UNAUTHORIZED, MemberExceptionMessage.ExistsMember.CANNOT_LOGIN.message()));
 
-        if (!member.getPassword().matches(password, passwordEncryptor)) {
+        if (!member.matchesPassword(password, passwordEncryptor)) {
             throw new CoreException(ErrorType.UNAUTHORIZED, MemberExceptionMessage.ExistsMember.CANNOT_LOGIN.message());
         }
 
         return new MemberInfo(
+                member.getId(),
                 member.getLoginId(),
                 member.getName(),
                 member.getBirthDate(),
@@ -60,7 +61,7 @@ public class MemberService {
         Member member = memberRepository.findByLoginId(userId)
                 .orElseThrow(() -> new CoreException(ErrorType.UNAUTHORIZED, MemberExceptionMessage.ExistsMember.CANNOT_LOGIN.message()));
 
-        if (!member.getPassword().matches(currentPassword, passwordEncryptor)) {
+        if (!member.matchesPassword(currentPassword, passwordEncryptor)) {
             throw new CoreException(ErrorType.UNAUTHORIZED, MemberExceptionMessage.Password.PASSWORD_INCORRECT.message());
         }
 
