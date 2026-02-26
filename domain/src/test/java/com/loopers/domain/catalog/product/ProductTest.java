@@ -102,6 +102,43 @@ class ProductTest {
     }
 
     @Test
+    void 좋아요수_증가_성공() {
+        // given
+        Product product = Product.register("티셔츠", "설명", Money.of(10000L), Stock.of(100L), 1L);
+
+        // when
+        product.increaseLikesCount();
+
+        // then
+        assertThat(product.hasLikesCount(1L)).isTrue();
+    }
+
+    @Test
+    void 좋아요수_감소_성공() {
+        // given
+        Product product = Product.register("티셔츠", "설명", Money.of(10000L), Stock.of(100L), 1L);
+        product.increaseLikesCount();
+
+        // when
+        product.decreaseLikesCount();
+
+        // then
+        assertThat(product.hasLikesCount(0L)).isTrue();
+    }
+
+    @Test
+    void 좋아요수_0_미만_불가() {
+        // given
+        Product product = Product.register("티셔츠", "설명", Money.of(10000L), Stock.of(100L), 1L);
+
+        // when
+        product.decreaseLikesCount();
+
+        // then
+        assertThat(product.hasLikesCount(0L)).isTrue();
+    }
+
+    @Test
     void 삭제된_상품_재고_차감_시_예외() {
         // given
         Product product = Product.register("티셔츠", "설명", Money.of(10000L), Stock.of(100L), 1L);

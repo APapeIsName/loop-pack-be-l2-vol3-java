@@ -65,6 +65,9 @@ classDiagram
         -Long memberId
         -LikeSubjectType subjectType
         -Long subjectId
+        +mark(memberId, subjectType, subjectId)$ Like
+        +isOwnedBy(memberId) boolean
+        +isForSubject(subjectType, subjectId) boolean
     }
 
     class LikeSubjectType {
@@ -72,7 +75,7 @@ classDiagram
         PRODUCT
     }
 
-    note for Like "단순 관계 레코드 (hard-delete)\nsubjectType + subjectId로 대상 식별\n상속 없이 enum으로 확장"
+    note for Like "호감 표현 (hard-delete)\n사용자의 특정 대상에 대한 관심/호감 표현\n서비스가 얻는 선호도 데이터\nsubjectType + subjectId로 대상 식별\n상속 없이 enum으로 확장"
 
     %% ── 주문 ──
 
@@ -193,7 +196,7 @@ classDiagram
 | Product | `guardNotDeleted()` | 삭제 여부를 자기가 검증한다 |
 | Order | `isOwnedBy(memberId)` | 본인 주문 확인을 자기가 판단한다 |
 
-**Like에 메서드가 없는 이유**: 좋아요는 "회원과 대상 사이의 관계 기록"이라는 본질에 충실한 단순 엔티티다. 등록은 `Like.of(memberId, subjectType, subjectId)`, 삭제는 물리 삭제(hard-delete). `subjectType` enum으로 대상 종류(PRODUCT, 향후 BRAND 등)를 구분하며, 상속 없이 확장 가능하다.
+**Like의 도메인 정의**: 좋아요는 사용자의 특정 대상에 대한 관심/호감 표현이다. 서비스가 사용자와의 계약을 통해 얻는 선호도 데이터로서의 가치를 가진다. 생성은 `Like.mark(memberId, subjectType, subjectId)`, 철회는 물리 삭제(hard-delete). 불변이며 수정은 없다. `isOwnedBy(memberId)` — 누구의 호감인지, `isForSubject(subjectType, subjectId)` — 어떤 대상에 대한 호감인지를 자기가 답한다. `subjectType` enum으로 대상 종류(PRODUCT, 향후 BRAND 등)를 구분하며, 상속 없이 확장 가능하다.
 
 ### 원칙 4: 한 객체에 책임이 몰리지 않았는가?
 
@@ -247,7 +250,7 @@ classDiagram
 | Quantity | 0+1 | 생성자 검증 | **적절**. 수량 규칙만 보유 |
 | Order | 3 | place(검증), isOwnedBy, assignOrderLines | **적절**. Aggregate Root로서 불변식 검증 + 하위 소속 관리 |
 | OrderLine | 3 | of(스냅샷 내부 생성), assignToOrder, assignSnapshot | **적절**. 주문 항목 생성 + 소속 관리. 연산의 닫힘(self 반환) |
-| Like | 0 | - | **적절**. 단순 관계 레코드. subjectType enum으로 대상 구분 |
+| Like | 2 | isOwnedBy, isForSubject | **적절**. 호감 표현. 자기 정체성(누구의, 어떤 대상에 대한)에 답하는 행위만 보유 |
 | OrderLineSnapshot | 0 | - | **적절**. 불변 스냅샷. Price 포함 |
 
 ### Service별
@@ -333,7 +336,7 @@ classDiagram
 | 4 | OrderStatus: ACCEPTED, REJECTED만 | 현재 요구사항에 중간 상태/취소 없음. enum이므로 확장 용이 | CANCELLED 포함 (현재 불필요, YAGNI) |
 | 5 | 모든 BC 간 참조를 ID(Long)만 사용 | BC 간 직접 의존 제거. MSA 전환 시 변경 최소화 | 객체 참조 (편리하나 BC 경계 위반) |
 | 6 | OrderLine(Entity) + OrderLineSnapshot(VO, @Entity) 분리 | OrderLine은 주문 항목으로 라인별 확장 지점(쿠폰, 부분취소). OrderLineSnapshot은 불변 스냅샷으로 정규화를 위해 별도 테이블 | OrderLineSnapshot 하나로 합치기 (확장 어려움), @Embeddable (정규화 위반) |
-| 7 | Like에 메서드 없음 | 단순 관계 레코드. hard-delete이므로 엔티티 행위 불필요 | toggle() 등 추가 (과도한 추상화) |
+| 7 | Like에 정체성 행위 메서드 추가 | "호감 표현"이라는 도메인 정의에 따라 `isOwnedBy`, `isForSubject`로 자기 정체성에 답함. 단순 관계 레코드가 아닌 선호도 데이터로서의 의미 부여 | 메서드 없음 (도메인 의미 손실), toggle() (과도한 추상화) |
 | 8 | 양방향 연관 0개 | 단방향만으로 모든 요구사항 충족. 양방향은 순환 의존과 복잡성 유발 | Product ↔ Brand 양방향 (편의성 vs 복잡성 트레이드오프) |
 | 9 | Like를 subjectType+subjectId로 일반화 | 상속(JOINED/SINGLE_TABLE) 대신 enum+ID 패턴 채택. UNIQUE 제약 자연스러움, 스키마 변경 없이 타입 확장, 무FK 철학 일관 | JPA 상속 (JOINED: UNIQUE 불가+JOIN 비용, SINGLE_TABLE: nullable 컬럼), ProductLike/BrandLike 클래스 분리 (타입 추가마다 엔티티+테이블 필요) |
 | 10 | Stock, Price, Quantity를 VO로 분리 | 자체 규칙(불변식)이 있는 속성만 VO로 캡슐화. "규칙 없으면 원시 타입" 기준 | 원시 타입 유지 (규칙이 엔티티나 Service에 흩어짐) |
@@ -368,4 +371,4 @@ classDiagram
 | ID 참조 (OrderLine → orderId, OrderLineSnapshot → orderLineId) | "주문 항목과 스냅샷은 주문에 종속되지만 ID로만 참조"라는 무FK 원칙 일관성 |
 | Aggregate Root 불변식 (Order.place → 검증) | "Aggregate Root가 하위 엔티티의 불변식을 직접 검증"하는 DDD 원칙 |
 | 연산의 닫힘 (assignToOrder → OrderLine) | assign류 메서드가 self를 반환하여 map/체이닝을 가능하게 하는 함수형 패턴 |
-| 메서드 없는 엔티티 (Like) | "관계 기록"이라는 본질에 충실 — 억지 행위 없음. subjectType enum으로 대상 종류 구분 |
+| 호감 표현 엔티티 (Like) | "선호도 데이터"라는 본질에 충실 — 자기 정체성(누구의, 어떤 대상)에 답하는 행위를 보유. subjectType enum으로 대상 종류 구분 |

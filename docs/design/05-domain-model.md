@@ -31,9 +31,10 @@
 - Aggregate: `Brand`, `Product`
 
 3. `Like Context`
-- 책임: 회원의 선호(좋아요) 관계 기록 관리
+- 책임: 사용자의 특정 대상에 대한 관심/호감 표현 관리. 서비스가 사용자와의 계약을 통해 얻는 선호도 데이터
 - Aggregate: `Like`
-- 모델: `Like(memberId, subjectType, subjectId)`
+- 모델: `Like(memberId, subjectType, subjectId)` + `mark()`, `isOwnedBy()`, `isForSubject()`
+- 비정규화 관계: Product.likesCount(인기도)는 Catalog BC가 소유. Like BC의 개별 레코드가 원본이며, likesCount는 BC 경계를 사유로 한 정당한 비정규화
 
 4. `Order Context`
 - 책임: 주문 생성/조회, 주문 스냅샷 보존, 수락/거절 판단

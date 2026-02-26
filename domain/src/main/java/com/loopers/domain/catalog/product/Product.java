@@ -83,6 +83,18 @@ public class Product extends BaseEntity {
         return this.stock.isEnough(quantity);
     }
 
+    public void increaseLikesCount() {
+        this.likesCount++;
+    }
+
+    public void decreaseLikesCount() {
+        this.likesCount = Math.max(0, this.likesCount - 1);
+    }
+
+    public boolean hasLikesCount(long value) {
+        return this.likesCount == value;
+    }
+
     private void guardNotDeleted() {
         if (isDeleted()) {
             throw new CoreException(ErrorType.BAD_REQUEST,
