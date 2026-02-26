@@ -61,7 +61,7 @@ public class ProductService {
                 .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
                         BrandExceptionMessage.Brand.NOT_FOUND.message()));
 
-        return toProductInfo(product, brand);
+        return ProductInfo.from(product, brand);
     }
 
     @Transactional(readOnly = true)
@@ -109,19 +109,7 @@ public class ProductService {
                 .collect(Collectors.toMap(Brand::getId, Function.identity()));
 
         return products.stream()
-                .map(product -> toProductInfo(product, brandMap.get(product.getBrandId())))
+                .map(product -> ProductInfo.from(product, brandMap.get(product.getBrandId())))
                 .toList();
-    }
-
-    private ProductInfo toProductInfo(Product product, Brand brand) {
-        return new ProductInfo(
-                product.getId(),
-                product.getName().getValue(),
-                product.getDescription(),
-                product.getPrice().getValue(),
-                product.getStock().getValue(),
-                product.getLikesCount(),
-                brand != null ? brand.getName().getValue() : null
-        );
     }
 }

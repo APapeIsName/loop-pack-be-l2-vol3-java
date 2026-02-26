@@ -1,6 +1,6 @@
 package com.loopers.domain.catalog.product;
 
-import com.loopers.domain.BaseEntity;
+import com.loopers.domain.SoftDeletableEntity;
 import com.loopers.domain.catalog.product.vo.Money;
 import com.loopers.domain.catalog.product.vo.Quantity;
 import com.loopers.domain.catalog.product.vo.Stock;
@@ -16,7 +16,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "product")
-public class Product extends BaseEntity {
+public class Product extends SoftDeletableEntity {
 
     @Embedded
     @AttributeOverride(name = "value", column = @Column(name = "name", nullable = false, length = 100))

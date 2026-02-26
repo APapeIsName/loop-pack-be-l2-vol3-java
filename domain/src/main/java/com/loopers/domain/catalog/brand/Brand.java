@@ -1,6 +1,6 @@
 package com.loopers.domain.catalog.brand;
 
-import com.loopers.domain.BaseEntity;
+import com.loopers.domain.SoftDeletableEntity;
 import com.loopers.domain.catalog.vo.Name;
 import com.loopers.support.error.CoreException;
 import com.loopers.support.error.ErrorType;
@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "brand")
-public class Brand extends BaseEntity {
+public class Brand extends SoftDeletableEntity {
 
     @Embedded
     @AttributeOverride(name = "value", column = @Column(name = "name", nullable = false, length = 100, unique = true))

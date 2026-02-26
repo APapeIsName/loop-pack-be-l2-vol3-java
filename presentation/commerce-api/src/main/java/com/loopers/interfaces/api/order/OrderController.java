@@ -11,6 +11,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * 주문 API
+ */
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
@@ -19,6 +22,7 @@ public class OrderController {
     private final OrderService orderService;
     private final MemberService memberService;
 
+    /** 주문 생성 */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public OrderApiResponse create(
@@ -30,6 +34,7 @@ public class OrderController {
         return OrderApiResponse.from(orderService.create(request.toCommand(member.memberId())));
     }
 
+    /** 내 주문 목록 조회 */
     @GetMapping
     public List<OrderApiResponse> getMyOrders(
             @RequestHeader("X-Loopers-LoginId") String loginId,
@@ -41,6 +46,7 @@ public class OrderController {
                 .toList();
     }
 
+    /** 주문 단건 조회 */
     @GetMapping("/{id}")
     public OrderApiResponse getById(
             @RequestHeader("X-Loopers-LoginId") String loginId,
