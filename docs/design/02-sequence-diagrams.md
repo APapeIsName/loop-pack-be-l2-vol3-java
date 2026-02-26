@@ -10,8 +10,8 @@
 ```
 OrderService → ProductService (주문 시 재고 확인/차감)
 LikeService → ProductService (좋아요 시 상품/브랜드 유효성 확인)
-BrandService ↔ ProductService (순환: 브랜드 삭제 연쇄 / 상품 등록 시 브랜드 검증)
-  → Facade로 해소: AdminBrandFacade, AdminProductFacade
+BrandService ↔ ProductService (같은 BC 내 cross-aggregate 규칙)
+  → CatalogDomainService로 해소 (Domain 레이어, Brand↔Product는 같은 Catalog BC)
 ```
 
 ---
@@ -102,10 +102,10 @@ sequenceDiagram
     Note over PS: 상품 존재·삭제 여부, 브랜드 삭제 여부 확인
     PS-->>LS: Product
 
-    LS->>LR: 중복 확인 existsByMemberIdAndProductId(memberId, productId)
+    LS->>LR: 중복 확인 existsByMemberIdAndSubjectTypeAndSubjectId(memberId, PRODUCT, productId)
     LR-->>LS: boolean
 
-    LS->>LR: 좋아요 저장 save(newLike)
+    LS->>LR: 좋아요 저장 save(Like.of(memberId, PRODUCT, productId))
 
     LS-->>C: 등록 완료
     C-->>M: 201 Created
@@ -113,7 +113,7 @@ sequenceDiagram
 
 #### 읽는 포인트
 - **LikeService**: 등록 흐름 조율. 상품 유효성은 ProductService에 위임하여, 상품/브랜드 상태를 직접 알 필요가 없다.
-- **LikeRepository**: 중복 확인과 저장의 책임. hard-delete 방식이므로 취소 이력 없이 단순하게 존재 여부만 확인한다.
+- **LikeRepository**: 중복 확인과 저장의 책임. hard-delete 방식이므로 취소 이력 없이 단순하게 존재 여부만 확인한다. Like는 `subjectType(PRODUCT) + subjectId`로 대상을 식별한다.
 - 이미 좋아요가 있으면 LikeService가 예외를 발생시킨다.
 
 ---
@@ -130,10 +130,10 @@ sequenceDiagram
     M->>C: DELETE /api/v1/products/{productId}/likes
     C->>LS: 좋아요 취소 cancelLike(memberId, productId)
 
-    LS->>LR: 좋아요 조회 findByMemberIdAndProductId(memberId, productId)
-    LR-->>LS: ProductLike
+    LS->>LR: 좋아요 조회 findByMemberIdAndSubjectTypeAndSubjectId(memberId, PRODUCT, productId)
+    LR-->>LS: Like
 
-    LS->>LR: 좋아요 삭제 delete(productLike)
+    LS->>LR: 좋아요 삭제 delete(like)
     Note over LR: 물리 삭제 (hard-delete)
 
     LS-->>C: 취소 완료
@@ -157,8 +157,8 @@ sequenceDiagram
 
     M->>C: GET /api/v1/likes?page&size
     C->>LS: 내 좋아요 목록 조회 getMyLikes(memberId, page, size)
-    LS->>LR: 좋아요 목록 조회 findLikesByMemberId(memberId, page, size)
-    Note over LR: 상품 활성 + 브랜드 활성 조건 필터<br/>삭제된 상품·브랜드의 좋아요는 제외
+    LS->>LR: 좋아요 목록 조회 findProductLikesByMemberId(memberId, page, size)
+    Note over LR: subjectType=PRODUCT 필터<br/>상품 활성 + 브랜드 활성 조건 필터<br/>삭제된 상품·브랜드의 좋아요는 제외
     LR-->>LS: Page<Product>
     LS-->>C: Page<ProductInfo>
     C-->>M: 200 OK
@@ -369,38 +369,37 @@ sequenceDiagram
 
 ### 4-5. 브랜드 삭제 (연쇄 soft-delete)
 
-> BrandService ↔ ProductService 순환 의존을 Facade로 해소한다.
+> Brand와 Product는 같은 Catalog BC. cross-aggregate 규칙은 CatalogDomainService(Domain 레이어)에서 처리한다.
 
 ```mermaid
 sequenceDiagram
     actor A as 관리자
     participant C as AdminBrandController
-    participant F as AdminBrandFacade
-    participant BS as BrandService
-    participant PS as ProductService
+    participant BS as AdminBrandService
+    participant CDS as CatalogDomainService
+    participant BR as BrandRepository
+    participant PR as ProductRepository
     participant B as Brand
 
     A->>C: DELETE /api/v1/admin/brands/{brandId}
-    C->>F: 브랜드 삭제 deleteBrand(brandId)
+    C->>BS: 브랜드 삭제 deleteBrand(brandId)
 
-    F->>BS: 브랜드 조회 getBrand(brandId)
-    BS-->>F: Brand
+    BS->>CDS: 브랜드 삭제 deleteBrand(brandId)
+    CDS->>BR: 브랜드 조회 findById(brandId)
+    BR-->>CDS: Brand
 
-    F->>B: 삭제 여부 확인 guardNotDeleted()
-    Note over B: 이미 삭제된 상태면 예외
+    CDS->>PR: 소속 상품 연쇄 삭제 softDeleteByBrandId(brandId)
+    CDS->>B: 삭제 delete()
+    Note over B: guardNotDeleted() + name 변경<br/>+ deletedAt 세팅 (UNIQUE 해소)
 
-    F->>PS: 소속 상품 연쇄 삭제 softDeleteByBrandId(brandId)
-    F->>B: 삭제 delete()
-    Note over B: name 변경 + deletedAt 세팅<br/>(UNIQUE 제약 해소)
-
-    F-->>C: 삭제 완료
+    BS-->>C: 삭제 완료
     C-->>A: 204 No Content
 ```
 
 #### 읽는 포인트
-- **AdminBrandFacade**: BrandService ↔ ProductService 순환을 해소하는 조율자. 삭제 순서(상품 먼저 → 브랜드 나중)를 결정하는 책임.
-- **Brand 엔티티**: `guardNotDeleted()` — 삭제 가능 상태인지 스스로 검증한다. `delete()` — deletedAt 세팅도 스스로 수행한다.
-- **ProductService**: 브랜드 ID로 소속 상품을 일괄 soft-delete하는 책임. 좋아요는 건드리지 않는다.
+- **CatalogDomainService**: 같은 BC(Catalog) 내 cross-aggregate 규칙 처리. 삭제 순서(상품 먼저 → 브랜드 나중)는 도메인 규칙.
+- **AdminBrandService**: 트랜잭션 경계 소유. CatalogDomainService를 호출하는 Application 조정자.
+- **Brand 엔티티**: `delete()` 내부에서 `guardNotDeleted()` + name 변경 + deletedAt 세팅을 스스로 수행한다.
 
 ---
 
@@ -448,44 +447,44 @@ sequenceDiagram
 
 ### 5-3. 상품 등록
 
-> BrandService ↔ ProductService 순환 의존을 Facade로 해소한다.
+> Brand와 Product는 같은 Catalog BC. 상품 등록 시 브랜드 검증은 CatalogDomainService(Domain 레이어)에서 처리한다.
 
 ```mermaid
 sequenceDiagram
     actor A as 관리자
     participant C as AdminProductController
-    participant F as AdminProductFacade
-    participant BS as BrandService
+    participant PS as AdminProductService
+    participant CDS as CatalogDomainService
+    participant BR as BrandRepository
     participant B as Brand
-    participant PS as ProductService
     participant P as Product
     participant PR as ProductRepository
 
     A->>C: POST /api/v1/admin/products {name, description, price, stock, brandId}
-    C->>F: 상품 등록 createProduct(name, description, price, stock, brandId)
+    C->>PS: 상품 등록 createProduct(name, description, price, stock, brandId)
 
-    F->>BS: 브랜드 조회 getBrand(brandId)
-    BS-->>F: Brand
+    PS->>CDS: 상품 생성 createProduct(brandId, name, price, stock, description)
+    CDS->>BR: 브랜드 조회 findById(brandId)
+    BR-->>CDS: Brand
 
-    F->>B: 삭제 여부 확인 guardNotDeleted()
+    CDS->>B: 삭제 여부 확인 guardNotDeleted()
     Note over B: 삭제된 브랜드면 예외
 
-    F->>PS: 상품 생성 createProduct(name, description, price, stock, brandId)
-    PS->>P: 생성 new Product(name, description, price, stock, brandId)
+    CDS->>P: 생성 Product.create(brandId, name, price, stock, description)
     Note over P: 가격 > 0, 재고 >= 0 검증
-    PS->>PR: 상품 저장 save(product)
-    PR-->>PS: Product
-    PS-->>F: Product
+    CDS->>PR: 상품 저장 save(product)
+    PR-->>CDS: Product
+    CDS-->>PS: Product
 
-    F-->>C: ProductInfo
+    PS-->>C: ProductInfo
     C-->>A: 201 Created
 ```
 
 #### 읽는 포인트
-- **AdminProductFacade**: BrandService ↔ ProductService 순환을 해소하는 조율자. 브랜드 검증 → 상품 생성 순서를 결정하는 책임.
+- **CatalogDomainService**: 같은 BC(Catalog) 내 cross-aggregate 규칙 처리. 브랜드 검증 → 상품 생성 순서는 도메인 규칙.
+- **AdminProductService**: 트랜잭션 경계 소유. CatalogDomainService를 호출하는 Application 조정자.
 - **Brand 엔티티**: `guardNotDeleted()` — 삭제된 브랜드에 상품을 등록할 수 없다는 불변식을 Brand 스스로가 지킨다.
 - **Product 엔티티**: 생성 시 입력값 검증(가격 > 0, 재고 >= 0)을 스스로 수행한다.
-- **ProductService**: 상품 생성 조율과 저장의 책임. 입력값 검증은 Product에 위임. BrandService를 모른다.
 
 ---
 

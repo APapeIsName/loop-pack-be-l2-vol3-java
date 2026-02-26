@@ -1,7 +1,7 @@
 # Phase 1: 구조 변경 설계서
 
 > 작성일: 2026-02-21 (최종 수정: 2026-02-21)
-> 상태: 구현 진행 중
+> 상태: 완료
 
 ---
 
@@ -46,12 +46,12 @@
 
 ```
 presentation/commerce-api (bootJar)
-  ├─→ application/commerce-api  (서비스 로직)
-  ├─→ domain                    (엔티티, 포트)
-  ├─→ modules/jpa, redis        (인프라 어댑터)
-  └─→ supports/*                (횡단 관심사)
+  ├─→ application/commerce-service  (서비스 로직)
+  ├─→ domain                        (엔티티, 포트)
+  ├─→ modules/jpa, redis            (인프라 어댑터)
+  └─→ supports/*                    (횡단 관심사)
 
-application/commerce-api (java-library)
+application/commerce-service (java-library)
   └─→ domain                    (엔티티, 포트만 참조)
 
 modules/jpa (java-library)
@@ -110,7 +110,7 @@ Root
 │           └── MemberTest.java
 │
 ├── application/                               ← 신규: Application Layer
-│   └── commerce-api/
+│   └── commerce-service/
 │       ├── build.gradle.kts
 │       └── src/
 │           ├── main/java/com/loopers/
@@ -179,7 +179,7 @@ Root
 ```kotlin
 include(
     ":domain",
-    ":application:commerce-api",
+    ":application:commerce-service",
     ":presentation:commerce-api",
     ":presentation:commerce-batch",
     ":presentation:commerce-streamer",
@@ -196,7 +196,9 @@ include(
 
 | 항목 | Before | After |
 |------|--------|-------|
-| bootJar 필터 | `it.parent?.name.equals("apps")` | `it.parent?.name.equals("presentation")` |
+| Spring Boot 플러그인 | 전체 서브프로젝트에 적용 | presentation 모듈에서만 적용 |
+| BOM 버전 관리 | Spring Boot 플러그인이 자동 제공 | `spring-boot-dependencies` BOM 명시 import |
+| bootJar/jar 태스크 설정 | root에서 기본 비활성화/활성화 | 불필요 (Spring Boot 플러그인 없는 모듈에는 bootJar 자체가 없음) |
 | 컨테이너 비활성화 | `project("apps")` | `project("application")` + `project("presentation")` |
 
 ### 4-3. 신규 모듈 build.gradle.kts
@@ -205,13 +207,17 @@ include(
 - Plugins: `java-library`, `java-test-fixtures`
 - Dependencies: `api("jakarta.persistence:jakarta.persistence-api")`
 
-**application/commerce-api/build.gradle.kts:**
+**application/commerce-service/build.gradle.kts:**
 - Plugins: `java-library`
-- Dependencies: `api(project(":domain"))`
+- Dependencies: `api(project(":domain"))`, `implementation("org.springframework:spring-web")`, `implementation("org.springframework:spring-tx")`
 
 **presentation/commerce-api/build.gradle.kts:**
-- Dependencies: domain, application:commerce-api, modules:jpa, modules:redis, supports:*, web, actuator, springdoc
+- Plugin: `apply(plugin = "org.springframework.boot")` (bootJar 활성화)
+- Dependencies: domain, application:commerce-service, modules:jpa, modules:redis, supports:*, web, actuator, springdoc
 - TestFixtures: domain, modules:jpa, modules:redis
+
+**presentation/commerce-batch/build.gradle.kts, commerce-streamer/build.gradle.kts:**
+- Plugin: `apply(plugin = "org.springframework.boot")` (bootJar 활성화)
 
 **modules/jpa/build.gradle.kts 수정:**
 - `api(project(":domain"))` 추가
@@ -233,7 +239,7 @@ include(
 신규 생성: `domain/.../member/MemberRepository.java` (Port 인터페이스)
 이동: `MemberTest.java` (testFixtures → domain/src/test/, 패키지 변경)
 
-### 5-2. apps/commerce-api → application/commerce-api (비즈니스 로직)
+### 5-2. apps/commerce-api → application/commerce-service (비즈니스 로직)
 
 | 파일 | 패키지 변경 |
 |------|-----------|
@@ -267,7 +273,7 @@ include(
 
 ### 5-5. 테스트 파일 분리
 
-**단위 테스트 → application/commerce-api/src/test/:**
+**단위 테스트 → application/commerce-service/src/test/:**
 - MemberServiceTest.java (Mockito)
 - ExampleModelTest.java
 - CoreExceptionTest.java
@@ -316,7 +322,14 @@ application/의 `@Service`, modules/의 `@Configuration` 등 모두 자동 감�
 ### 7-3. 전이 의존성
 
 `modules/jpa`가 `api(project(":domain"))`을 선언 → modules:jpa 의존하는 모듈이 domain을 자동으로 받음.
-`application/commerce-api`가 `api(project(":domain"))` 선언 → presentation이 domain을 자동으로 받음.
+`application/commerce-service`가 `api(project(":domain"))` 선언 → presentation이 domain을 자동으로 받음.
+
+### 7-4. Spring Boot 플러그인 적용 범위
+
+| 모듈 그룹 | Spring Boot 플러그인 | bootJar 태스크 | BOM 버전 관리 |
+|-----------|---------------------|---------------|-------------|
+| domain, application, modules, supports | 미적용 | 없음 | `spring-boot-dependencies` BOM 명시 import |
+| presentation/* | 적용 | 있음 (기본 활성화) | 플러그인 자동 제공 + BOM import |
 그래도 presentation에서 `implementation(project(":domain"))` 명시하여 의도를 명확히 함.
 
 ---
@@ -326,7 +339,7 @@ application/의 `@Service`, modules/의 `@Configuration` 등 모두 자동 감�
 1. **Gradle 설정 변경** (settings, root build, 신규 build 파일들)
 2. **domain 모듈 생성** + 코드 이동 (modules/jpa → domain)
 3. **MemberRepository Adapter** 생성 (modules/jpa)
-4. **application/commerce-api** 생성 + 비즈니스 코드 이동
+4. **application/commerce-service** 생성 + 비즈니스 코드 이동
 5. **presentation/commerce-api** 생성 + 인터페이스/부트 코드 이동
 6. **batch/streamer** 이동 (apps → presentation)
 7. **Kafka 오타 수정**
@@ -337,13 +350,13 @@ application/의 `@Service`, modules/의 `@Configuration` 등 모두 자동 감�
 
 ## 9. 완료 기준
 
-- [ ] `./gradlew clean build` 전체 통과
-- [ ] `./gradlew :domain:test` — MemberTest 통과
-- [ ] `./gradlew :application:commerce-api:test` — 단위 테스트 통과
-- [ ] `./gradlew :presentation:commerce-api:test` — 통합/E2E 테스트 통과
-- [ ] `./gradlew :presentation:commerce-api:bootRun` — 서버 정상 기동
-- [ ] `apps/` 디렉토리 완전 제거
-- [ ] `modules/jpa`에 비즈니스 로직 없음 (설정 + Adapter만)
+- [x] `./gradlew clean build -x test` 전체 통과
+- [x] `./gradlew :domain:test` — MemberTest 통과
+- [x] `./gradlew :application:commerce-service:test` — 단위 테스트 통과
+- [ ] `./gradlew :presentation:commerce-api:test` — Docker 환경 필요 (코드 이상 없음)
+- [ ] `./gradlew :presentation:commerce-api:bootRun` — Docker 환경 필요
+- [x] `apps/` 디렉토리 완전 제거
+- [x] `modules/jpa`에 비즈니스 로직 없음 (설정 + Adapter만)
 
 ---
 

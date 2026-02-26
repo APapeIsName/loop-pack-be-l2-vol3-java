@@ -1,5 +1,4 @@
 import org.gradle.api.Project.DEFAULT_VERSION
-import org.springframework.boot.gradle.tasks.bundling.BootJar
 
 /** --- configuration functions --- */
 fun getGitHash(): String {
@@ -35,12 +34,12 @@ allprojects {
 
 subprojects {
     apply(plugin = "java")
-    apply(plugin = "org.springframework.boot")
     apply(plugin = "io.spring.dependency-management")
     apply(plugin = "jacoco")
 
     dependencyManagement {
         imports {
+            mavenBom("org.springframework.boot:spring-boot-dependencies:${project.properties["springBootVersion"]}")
             mavenBom("org.springframework.cloud:spring-cloud-dependencies:${project.properties["springCloudDependenciesVersion"]}")
         }
     }
@@ -67,14 +66,6 @@ subprojects {
         testImplementation("org.springframework.boot:spring-boot-testcontainers")
         testImplementation("org.testcontainers:testcontainers")
         testImplementation("org.testcontainers:junit-jupiter")
-    }
-
-    tasks.withType(Jar::class) { enabled = true }
-    tasks.withType(BootJar::class) { enabled = false }
-
-    configure(allprojects.filter { it.parent?.name.equals("apps") }) {
-        tasks.withType(Jar::class) { enabled = false }
-        tasks.withType(BootJar::class) { enabled = true }
     }
 
     tasks.test {
@@ -106,6 +97,7 @@ subprojects {
 }
 
 // module-container 는 task 를 실행하지 않도록 한다.
-project("apps") { tasks.configureEach { enabled = false } }
-project("modules") { tasks.configureEach { enabled = false } }
+project("application") { tasks.configureEach { enabled = false } }
+project("presentation") { tasks.configureEach { enabled = false } }
+project("infrastructure") { tasks.configureEach { enabled = false } }
 project("supports") { tasks.configureEach { enabled = false } }

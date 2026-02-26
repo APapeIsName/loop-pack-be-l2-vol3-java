@@ -203,3 +203,16 @@ Phase 3: 테스트 코드 수정
 ```
 
 각 Phase 완료 후 `./gradlew test` 통과를 확인하며 점진적으로 진행.
+
+---
+
+## 7. Phase 2 논의 사항 (2026-02-22 추가)
+
+Phase 2에서는 예외 체계 설계, VO 전략, DomainService 보류 등 중요한 설계 논의가 진행됨.
+상세 기록: `docs/thought/phase2-discussion-log.md`
+
+주요 결정 사항:
+- **ErrorType**: HttpStatus 제거 → pure enum, domain 레이어에 위치. 각 presentation이 자기 프로토콜에 맞게 해석.
+- **VO 도입 기준**: "검증이 자주 변하거나 정책적으로 자주 변하는 속성" → VO. Password도 VO로 전환.
+- **DomainService**: 현재 Member만으로는 불필요. 신규 도메인 간 로직 발생 시 도입.
+- **실용주의 일관성**: JPA 허용(표준 스펙, 분리 비용 높음) vs HttpStatus 불허(Spring 고유, 분리 비용 낮음) — 같은 기준, 다른 결론.

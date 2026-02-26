@@ -1,5 +1,7 @@
 # 아키텍처 논의 기록
 
+> **ARCHIVE** — 이 문서는 히스토리 참고용입니다. 현재 설계 기준 문서(SoT)는 `docs/design/01~04-*.md`입니다.
+
 > 작성일: 2026-02-21
 > 참여: 개발자, AI (Claude Code)
 > 맥락: TDD + DDD 기반 커머스 프로젝트 리팩토링 전 논의
@@ -84,7 +86,7 @@
 Root
 ├── domain/              ← Domain Layer (java-library)
 ├── application/         ← Application Layer (java-library)
-│   └── commerce-api/
+│   └── commerce-service/
 ├── presentation/        ← Presentation Layer (bootJar)
 │   └── commerce-api/
 ├── modules/             ← Infrastructure Layer (java-library)
