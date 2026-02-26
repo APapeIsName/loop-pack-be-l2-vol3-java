@@ -35,51 +35,20 @@ public class OrderService {
     @Transactional
     public OrderInfo create(OrderCreateCommand command) {
         List<OrderLineRequest> requests = command.orderLines();
-        List<Long> productIds = requests.stream()
-                .map(OrderLineRequest::productId)
-                .distinct()
-                .sorted()
-                .toList();
+        List<Long> productIds = extractProductIds(requests);
 
         Map<Long, Product> productMap = findActiveProducts(productIds);
+        Map<Long, Brand> brandMap = findBrandMap(productMap);
 
-        List<Long> brandIds = productMap.values().stream()
-                .map(Product::getBrandId).distinct().toList();
-        Map<Long, Brand> brandMap = brandRepository.findAllByIdIn(brandIds).stream()
-                .collect(Collectors.toMap(Brand::getId, Function.identity()));
-
-        boolean allEnough = requests.stream()
-                .allMatch(req -> productMap.get(req.productId())
-                        .hasEnoughStock(Quantity.of(req.quantity())));
-        OrderStatus status = allEnough ? OrderStatus.ACCEPTED : OrderStatus.REJECTED;
-
-        if (allEnough) {
-            requests.forEach(req ->
-                    productMap.get(req.productId()).decreaseStock(Quantity.of(req.quantity())));
+        OrderStatus status = determineStatus(requests, productMap);
+        if (status == OrderStatus.ACCEPTED) {
+            decreaseStock(requests, productMap);
         }
 
-        List<OrderLine> orderLines = requests.stream()
-                .map(req -> {
-                    Product product = productMap.get(req.productId());
-                    Brand brand = brandMap.get(product.getBrandId());
-                    return OrderLine.of(
-                            req.productId(), Quantity.of(req.quantity()),
-                            product.getName().getValue(), product.getDescription(),
-                            product.getPrice().getValue(),
-                            brand != null ? brand.getName().getValue() : null
-                    );
-                })
-                .toList();
-
-        Order order = Order.place(command.memberId(), orderLines, status);
-        Order savedOrder = orderRepository.save(order);
-        List<OrderLine> savedLines = orderLineRepository.saveAll(
-                savedOrder.assignOrderLines(orderLines));
-
-        List<OrderLineSnapshot> snapshots = savedLines.stream()
-                .map(line -> line.assignSnapshot().getSnapshot())
-                .toList();
-        orderLineSnapshotRepository.saveAll(snapshots);
+        List<OrderLine> orderLines = createOrderLines(requests, productMap, brandMap);
+        Order savedOrder = orderRepository.save(Order.place(command.memberId(), orderLines, status));
+        List<OrderLine> savedLines = orderLineRepository.saveAll(savedOrder.assignOrderLines(orderLines));
+        List<OrderLineSnapshot> snapshots = saveSnapshots(savedLines);
 
         return toOrderInfo(savedOrder, savedLines, snapshots);
     }
@@ -119,6 +88,56 @@ public class OrderService {
                         OrderExceptionMessage.Order.NOT_FOUND.message()));
 
         return toOrderInfo(order);
+    }
+
+    private List<Long> extractProductIds(List<OrderLineRequest> requests) {
+        return requests.stream()
+                .map(OrderLineRequest::productId)
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    private Map<Long, Brand> findBrandMap(Map<Long, Product> productMap) {
+        List<Long> brandIds = productMap.values().stream()
+                .map(Product::getBrandId).distinct().toList();
+        return brandRepository.findAllByIdIn(brandIds).stream()
+                .collect(Collectors.toMap(Brand::getId, Function.identity()));
+    }
+
+    private OrderStatus determineStatus(List<OrderLineRequest> requests, Map<Long, Product> productMap) {
+        boolean allEnough = requests.stream()
+                .allMatch(req -> productMap.get(req.productId())
+                        .hasEnoughStock(Quantity.of(req.quantity())));
+        return OrderStatus.determine(allEnough);
+    }
+
+    private void decreaseStock(List<OrderLineRequest> requests, Map<Long, Product> productMap) {
+        requests.forEach(req ->
+                productMap.get(req.productId()).decreaseStock(Quantity.of(req.quantity())));
+    }
+
+    private List<OrderLine> createOrderLines(List<OrderLineRequest> requests, Map<Long, Product> productMap, Map<Long, Brand> brandMap) {
+        return requests.stream()
+                .map(req -> {
+                    Product product = productMap.get(req.productId());
+                    Brand brand = brandMap.get(product.getBrandId());
+                    return OrderLine.of(
+                            req.productId(), Quantity.of(req.quantity()),
+                            product.getName().getValue(), product.getDescription(),
+                            product.getPrice().getValue(),
+                            brand != null ? brand.getName().getValue() : null
+                    );
+                })
+                .toList();
+    }
+
+    private List<OrderLineSnapshot> saveSnapshots(List<OrderLine> savedLines) {
+        List<OrderLineSnapshot> snapshots = savedLines.stream()
+                .map(line -> line.assignSnapshot().getSnapshot())
+                .toList();
+        orderLineSnapshotRepository.saveAll(snapshots);
+        return snapshots;
     }
 
     private Map<Long, Product> findActiveProducts(List<Long> productIds) {
