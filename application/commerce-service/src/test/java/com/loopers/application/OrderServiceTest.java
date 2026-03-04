@@ -4,16 +4,17 @@ import com.loopers.application.service.OrderService;
 import com.loopers.application.service.dto.OrderCreateCommand;
 import com.loopers.application.service.dto.OrderInfo;
 import com.loopers.application.service.dto.OrderLineRequest;
+import com.loopers.domain.catalog.OrderStockService;
 import com.loopers.domain.catalog.brand.Brand;
 import com.loopers.domain.catalog.brand.BrandRepository;
 import com.loopers.domain.catalog.product.Product;
-import com.loopers.domain.catalog.product.ProductExceptionMessage;
-import com.loopers.domain.catalog.product.ProductRepository;
 import com.loopers.domain.catalog.product.vo.Money;
 import com.loopers.domain.catalog.product.vo.Quantity;
 import com.loopers.domain.catalog.product.vo.Stock;
+import com.loopers.domain.coupon.CouponApplyResult;
+import com.loopers.domain.coupon.CouponApplyService;
+import com.loopers.domain.coupon.IssuedCoupon;
 import com.loopers.domain.order.*;
-import com.loopers.support.error.CoreException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -21,7 +22,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,6 +39,15 @@ class OrderServiceTest {
     private OrderService orderService;
 
     @Mock
+    private OrderStockService orderStockService;
+
+    @Mock
+    private CouponApplyService couponApplyService;
+
+    @Mock
+    private BrandRepository brandRepository;
+
+    @Mock
     private OrderRepository orderRepository;
 
     @Mock
@@ -44,22 +56,17 @@ class OrderServiceTest {
     @Mock
     private OrderLineSnapshotRepository orderLineSnapshotRepository;
 
-    @Mock
-    private ProductRepository productRepository;
-
-    @Mock
-    private BrandRepository brandRepository;
-
     // 주문을 생성한다
 
     @Test
     void 주문_생성_성공_재고_충분하면_수락() {
         // given
-        givenProductAndBrand(1L, "에어맥스", 50, 1L, "나이키");
+        givenProductLockAndValidate(1L, "에어맥스", 50, 1L);
+        givenBrands(1L, "나이키");
         givenOrderSave();
         OrderCreateCommand command = new OrderCreateCommand(10L, List.of(
                 new OrderLineRequest(1L, 2)
-        ));
+        ), null);
 
         // when
         OrderInfo result = orderService.create(command);
@@ -71,11 +78,12 @@ class OrderServiceTest {
     @Test
     void 주문_생성_성공_재고_부족하면_거절() {
         // given
-        givenProductAndBrand(1L, "에어맥스", 1, 1L, "나이키");
+        givenProductLockAndValidate(1L, "에어맥스", 1, 1L);
+        givenBrands(1L, "나이키");
         givenOrderSave();
         OrderCreateCommand command = new OrderCreateCommand(10L, List.of(
                 new OrderLineRequest(1L, 5)
-        ));
+        ), null);
 
         // when
         OrderInfo result = orderService.create(command);
@@ -88,13 +96,12 @@ class OrderServiceTest {
     void 주문_거절_시_재고_차감하지_않는다() {
         // given
         Product product = createProduct(1L, "에어맥스", 1, 1L);
-        Brand brand = createBrand(1L, "나이키");
-        given(productRepository.findAllByIdIn(List.of(1L))).willReturn(List.of(product));
-        given(brandRepository.findAllByIdIn(List.of(1L))).willReturn(List.of(brand));
+        givenProductLockAndValidateWithProduct(product);
+        givenBrands(1L, "나이키");
         givenOrderSave();
         OrderCreateCommand command = new OrderCreateCommand(10L, List.of(
                 new OrderLineRequest(1L, 5)
-        ));
+        ), null);
 
         // when
         orderService.create(command);
@@ -107,13 +114,12 @@ class OrderServiceTest {
     void 주문_수락_시_재고_차감된다() {
         // given
         Product product = createProduct(1L, "에어맥스", 50, 1L);
-        Brand brand = createBrand(1L, "나이키");
-        given(productRepository.findAllByIdIn(List.of(1L))).willReturn(List.of(product));
-        given(brandRepository.findAllByIdIn(List.of(1L))).willReturn(List.of(brand));
+        givenProductLockAndValidateWithProduct(product);
+        givenBrands(1L, "나이키");
         givenOrderSave();
         OrderCreateCommand command = new OrderCreateCommand(10L, List.of(
                 new OrderLineRequest(1L, 2)
-        ));
+        ), null);
 
         // when
         orderService.create(command);
@@ -123,59 +129,135 @@ class OrderServiceTest {
     }
 
     @Test
-    void 삭제된_상품_포함_시_예외() {
-        // given
-        Product product = createProduct(1L, "에어맥스", 50, 1L);
-        product.delete();
-        given(productRepository.findAllByIdIn(List.of(1L))).willReturn(List.of(product));
-        OrderCreateCommand command = new OrderCreateCommand(10L, List.of(
-                new OrderLineRequest(1L, 2)
-        ));
-
-        // when & then
-        assertThatThrownBy(() -> orderService.create(command))
-                .isInstanceOf(CoreException.class)
-                .hasMessage(ProductExceptionMessage.Product.ALREADY_DELETED.message());
-    }
-
-    @Test
-    void 존재하지_않는_상품_포함_시_예외() {
-        // given
-        given(productRepository.findAllByIdIn(List.of(999L))).willReturn(List.of());
-        OrderCreateCommand command = new OrderCreateCommand(10L, List.of(
-                new OrderLineRequest(999L, 2)
-        ));
-
-        // when & then
-        assertThatThrownBy(() -> orderService.create(command))
-                .isInstanceOf(CoreException.class)
-                .hasMessage(ProductExceptionMessage.Product.NOT_FOUND.message());
-    }
-
-    @Test
     void 중복_상품_주문_시_예외() {
         // given
-        givenProductAndBrand(1L, "에어맥스", 50, 1L, "나이키");
+        givenProductLockAndValidate(1L, "에어맥스", 50, 1L);
+        givenBrands(1L, "나이키");
         OrderCreateCommand command = new OrderCreateCommand(10L, List.of(
                 new OrderLineRequest(1L, 2),
                 new OrderLineRequest(1L, 3)
-        ));
+        ), null);
 
         // when & then
         assertThatThrownBy(() -> orderService.create(command))
-                .isInstanceOf(CoreException.class)
+                .isInstanceOf(com.loopers.support.error.CoreException.class)
                 .hasMessage(OrderExceptionMessage.Order.DUPLICATE_PRODUCT.message());
     }
 
     @Test
     void 빈_주문_시_예외() {
         // given
-        OrderCreateCommand command = new OrderCreateCommand(10L, List.of());
+        OrderCreateCommand command = new OrderCreateCommand(10L, List.of(), null);
 
         // when & then
         assertThatThrownBy(() -> orderService.create(command))
-                .isInstanceOf(CoreException.class)
+                .isInstanceOf(com.loopers.support.error.CoreException.class)
                 .hasMessage(OrderExceptionMessage.Order.EMPTY_ORDER_LINES.message());
+    }
+
+    @Test
+    void 주문_원금액이_정확히_계산된다() {
+        // given
+        givenProductLockAndValidate(1L, "에어맥스", 50, 1L);
+        givenBrands(1L, "나이키");
+        givenOrderSave();
+        OrderCreateCommand command = new OrderCreateCommand(10L, List.of(
+                new OrderLineRequest(1L, 2)
+        ), null);
+
+        // when
+        OrderInfo result = orderService.create(command);
+
+        // then
+        assertThat(result.originalAmount()).isEqualTo(200000);
+    }
+
+    @Test
+    void 쿠폰_없이_주문하면_할인금액이_0이다() {
+        // given
+        givenProductLockAndValidate(1L, "에어맥스", 50, 1L);
+        givenBrands(1L, "나이키");
+        givenOrderSave();
+        OrderCreateCommand command = new OrderCreateCommand(10L, List.of(
+                new OrderLineRequest(1L, 2)
+        ), null);
+
+        // when
+        OrderInfo result = orderService.create(command);
+
+        // then
+        assertThat(result.discountAmount()).isEqualTo(0);
+    }
+
+    // 쿠폰 적용 주문
+
+    @Test
+    void 쿠폰_적용_주문_성공_할인금액이_반영된다() {
+        // given
+        givenProductLockAndValidate(1L, "에어맥스", 50, 1L);
+        givenBrands(1L, "나이키");
+        givenOrderSave();
+
+        IssuedCoupon issuedCoupon = IssuedCoupon.issue(1L, 10L);
+        ReflectionTestUtils.setField(issuedCoupon, "id", 100L);
+        given(couponApplyService.validate(100L, 10L, 200000))
+                .willReturn(new CouponApplyResult(issuedCoupon, 3000));
+
+        OrderCreateCommand command = new OrderCreateCommand(10L, List.of(
+                new OrderLineRequest(1L, 2)
+        ), 100L);
+
+        // when
+        OrderInfo result = orderService.create(command);
+
+        // then
+        assertThat(result.discountAmount()).isEqualTo(3000);
+    }
+
+    @Test
+    void 쿠폰_적용_주문_성공_최종금액이_정확하다() {
+        // given
+        givenProductLockAndValidate(1L, "에어맥스", 50, 1L);
+        givenBrands(1L, "나이키");
+        givenOrderSave();
+
+        IssuedCoupon issuedCoupon = IssuedCoupon.issue(1L, 10L);
+        ReflectionTestUtils.setField(issuedCoupon, "id", 100L);
+        given(couponApplyService.validate(100L, 10L, 200000))
+                .willReturn(new CouponApplyResult(issuedCoupon, 3000));
+
+        OrderCreateCommand command = new OrderCreateCommand(10L, List.of(
+                new OrderLineRequest(1L, 2)
+        ), 100L);
+
+        // when
+        OrderInfo result = orderService.create(command);
+
+        // then
+        assertThat(result.finalAmount()).isEqualTo(197000);
+    }
+
+    @Test
+    void 쿠폰_적용_주문_거절_시_쿠폰_사용하지_않는다() {
+        // given
+        givenProductLockAndValidate(1L, "에어맥스", 1, 1L);
+        givenBrands(1L, "나이키");
+        givenOrderSave();
+
+        IssuedCoupon issuedCoupon = IssuedCoupon.issue(1L, 10L);
+        ReflectionTestUtils.setField(issuedCoupon, "id", 100L);
+        given(couponApplyService.validate(100L, 10L, 500000))
+                .willReturn(new CouponApplyResult(issuedCoupon, 3000));
+
+        OrderCreateCommand command = new OrderCreateCommand(10L, List.of(
+                new OrderLineRequest(1L, 5)
+        ), 100L);
+
+        // when
+        orderService.create(command);
+
+        // then
+        assertThat(issuedCoupon.isAvailable()).isTrue();
     }
 
     // 내 주문 내역을 조회한다
@@ -186,7 +268,7 @@ class OrderServiceTest {
         Long memberId = 10L;
         Order order = Order.place(memberId, List.of(
                 OrderLine.of(1L, Quantity.of(2), "에어맥스", "설명", 100000, "나이키")
-        ), OrderStatus.ACCEPTED);
+        ), OrderStatus.ACCEPTED, null, 200000, 0, 200000);
         given(orderRepository.findByMemberId(memberId)).willReturn(List.of(order));
         given(orderLineRepository.findByOrderId(any())).willReturn(List.of());
         given(orderLineSnapshotRepository.findByOrderLineIdIn(any())).willReturn(List.of());
@@ -207,7 +289,7 @@ class OrderServiceTest {
         Long memberId = 10L;
         Order order = Order.place(memberId, List.of(
                 OrderLine.of(1L, Quantity.of(2), "에어맥스", "설명", 100000, "나이키")
-        ), OrderStatus.ACCEPTED);
+        ), OrderStatus.ACCEPTED, null, 200000, 0, 200000);
         given(orderRepository.findById(orderId)).willReturn(Optional.of(order));
         given(orderLineRepository.findByOrderId(any())).willReturn(List.of());
         given(orderLineSnapshotRepository.findByOrderLineIdIn(any())).willReturn(List.of());
@@ -225,12 +307,12 @@ class OrderServiceTest {
         Long orderId = 1L;
         Order order = Order.place(10L, List.of(
                 OrderLine.of(1L, Quantity.of(2), "에어맥스", "설명", 100000, "나이키")
-        ), OrderStatus.ACCEPTED);
+        ), OrderStatus.ACCEPTED, null, 200000, 0, 200000);
         given(orderRepository.findById(orderId)).willReturn(Optional.of(order));
 
         // when & then
         assertThatThrownBy(() -> orderService.getById(orderId, 99L))
-                .isInstanceOf(CoreException.class)
+                .isInstanceOf(com.loopers.support.error.CoreException.class)
                 .hasMessage(OrderExceptionMessage.Order.NOT_OWNER.message());
     }
 
@@ -241,7 +323,7 @@ class OrderServiceTest {
 
         // when & then
         assertThatThrownBy(() -> orderService.getById(999L, 10L))
-                .isInstanceOf(CoreException.class)
+                .isInstanceOf(com.loopers.support.error.CoreException.class)
                 .hasMessage(OrderExceptionMessage.Order.NOT_FOUND.message());
     }
 
@@ -252,7 +334,7 @@ class OrderServiceTest {
         // given
         Order order = Order.place(10L, List.of(
                 OrderLine.of(1L, Quantity.of(2), "에어맥스", "설명", 100000, "나이키")
-        ), OrderStatus.ACCEPTED);
+        ), OrderStatus.ACCEPTED, null, 200000, 0, 200000);
         given(orderRepository.findAll()).willReturn(List.of(order));
         given(orderLineRepository.findByOrderId(any())).willReturn(List.of());
         given(orderLineSnapshotRepository.findByOrderLineIdIn(any())).willReturn(List.of());
@@ -276,10 +358,21 @@ class OrderServiceTest {
         return brand;
     }
 
-    private void givenProductAndBrand(Long productId, String productName, long stock, Long brandId, String brandName) {
+    private void givenProductLockAndValidate(Long productId, String productName, long stock, Long brandId) {
         Product product = createProduct(productId, productName, stock, brandId);
+        Map<Long, Product> productMap = new LinkedHashMap<>();
+        productMap.put(productId, product);
+        given(orderStockService.lockAndValidate(List.of(productId))).willReturn(productMap);
+    }
+
+    private void givenProductLockAndValidateWithProduct(Product product) {
+        Map<Long, Product> productMap = new LinkedHashMap<>();
+        productMap.put(product.getId(), product);
+        given(orderStockService.lockAndValidate(List.of(product.getId()))).willReturn(productMap);
+    }
+
+    private void givenBrands(Long brandId, String brandName) {
         Brand brand = createBrand(brandId, brandName);
-        given(productRepository.findAllByIdIn(List.of(productId))).willReturn(List.of(product));
         given(brandRepository.findAllByIdIn(List.of(brandId))).willReturn(List.of(brand));
     }
 

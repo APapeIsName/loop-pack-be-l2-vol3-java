@@ -4,12 +4,13 @@ import com.loopers.application.service.dto.OrderCreateCommand;
 import com.loopers.application.service.dto.OrderInfo;
 import com.loopers.application.service.dto.OrderLineInfo;
 import com.loopers.application.service.dto.OrderLineRequest;
+import com.loopers.domain.catalog.OrderStockService;
 import com.loopers.domain.catalog.brand.Brand;
 import com.loopers.domain.catalog.brand.BrandRepository;
 import com.loopers.domain.catalog.product.Product;
-import com.loopers.domain.catalog.product.ProductExceptionMessage;
-import com.loopers.domain.catalog.product.ProductRepository;
 import com.loopers.domain.catalog.product.vo.Quantity;
+import com.loopers.domain.coupon.CouponApplyResult;
+import com.loopers.domain.coupon.CouponApplyService;
 import com.loopers.domain.order.*;
 import com.loopers.support.error.CoreException;
 import com.loopers.support.error.ErrorType;
@@ -26,27 +27,45 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class OrderService {
 
+    private final OrderStockService orderStockService;
+    private final CouponApplyService couponApplyService;
+    private final BrandRepository brandRepository;
     private final OrderRepository orderRepository;
     private final OrderLineRepository orderLineRepository;
     private final OrderLineSnapshotRepository orderLineSnapshotRepository;
-    private final ProductRepository productRepository;
-    private final BrandRepository brandRepository;
 
     @Transactional
     public OrderInfo create(OrderCreateCommand command) {
         List<OrderLineRequest> requests = command.orderLines();
-        List<Long> productIds = extractProductIds(requests);
+        List<Long> productIds = extractSortedProductIds(requests);
 
-        Map<Long, Product> productMap = findActiveProducts(productIds);
+        Map<Long, Product> productMap = orderStockService.lockAndValidate(productIds);
         Map<Long, Brand> brandMap = findBrandMap(productMap);
+
+        long originalAmount = calculateOriginalAmount(requests, productMap);
+
+        long discountAmount = 0;
+        CouponApplyResult couponResult = null;
+        if (command.issuedCouponId() != null) {
+            couponResult = couponApplyService.validate(
+                    command.issuedCouponId(), command.memberId(), originalAmount);
+            discountAmount = couponResult.discountAmount();
+        }
+
+        long finalAmount = originalAmount - discountAmount;
 
         OrderStatus status = determineStatus(requests, productMap);
         if (status == OrderStatus.ACCEPTED) {
             decreaseStock(requests, productMap);
+            if (couponResult != null) {
+                couponResult.issuedCoupon().use();
+            }
         }
 
         List<OrderLine> orderLines = createOrderLines(requests, productMap, brandMap);
-        Order savedOrder = orderRepository.save(Order.place(command.memberId(), orderLines, status));
+        Order savedOrder = orderRepository.save(
+                Order.place(command.memberId(), orderLines, status,
+                        command.issuedCouponId(), originalAmount, discountAmount, finalAmount));
         List<OrderLine> savedLines = orderLineRepository.saveAll(savedOrder.assignOrderLines(orderLines));
         List<OrderLineSnapshot> snapshots = saveSnapshots(savedLines);
 
@@ -90,7 +109,7 @@ public class OrderService {
         return toOrderInfo(order);
     }
 
-    private List<Long> extractProductIds(List<OrderLineRequest> requests) {
+    private List<Long> extractSortedProductIds(List<OrderLineRequest> requests) {
         return requests.stream()
                 .map(OrderLineRequest::productId)
                 .distinct()
@@ -103,6 +122,12 @@ public class OrderService {
                 .map(Product::getBrandId).distinct().toList();
         return brandRepository.findAllByIdIn(brandIds).stream()
                 .collect(Collectors.toMap(Brand::getId, Function.identity()));
+    }
+
+    private long calculateOriginalAmount(List<OrderLineRequest> requests, Map<Long, Product> productMap) {
+        return requests.stream()
+                .mapToLong(req -> productMap.get(req.productId()).totalPrice(req.quantity()))
+                .sum();
     }
 
     private OrderStatus determineStatus(List<OrderLineRequest> requests, Map<Long, Product> productMap) {
@@ -124,9 +149,9 @@ public class OrderService {
                     Brand brand = brandMap.get(product.getBrandId());
                     return OrderLine.of(
                             req.productId(), Quantity.of(req.quantity()),
-                            product.getName().getValue(), product.getDescription(),
-                            product.getPrice().getValue(),
-                            brand != null ? brand.getName().getValue() : null
+                            product.nameValue(), product.getDescription(),
+                            product.priceValue(),
+                            brand != null ? brand.nameValue() : null
                     );
                 })
                 .toList();
@@ -138,25 +163,6 @@ public class OrderService {
                 .toList();
         orderLineSnapshotRepository.saveAll(snapshots);
         return snapshots;
-    }
-
-    private Map<Long, Product> findActiveProducts(List<Long> productIds) {
-        List<Product> products = productRepository.findAllByIdIn(productIds);
-
-        if (products.size() != productIds.size()) {
-            throw new CoreException(ErrorType.NOT_FOUND,
-                    ProductExceptionMessage.Product.NOT_FOUND.message());
-        }
-
-        products.forEach(product -> {
-            if (product.isDeleted()) {
-                throw new CoreException(ErrorType.BAD_REQUEST,
-                        ProductExceptionMessage.Product.ALREADY_DELETED.message());
-            }
-        });
-
-        return products.stream()
-                .collect(Collectors.toMap(Product::getId, Function.identity()));
     }
 
     private OrderInfo toOrderInfo(Order order) {
@@ -176,7 +182,7 @@ public class OrderService {
                     return new OrderLineInfo(
                             line.getId(),
                             line.getProductId(),
-                            line.getQuantity().getValue(),
+                            line.quantityValue(),
                             snapshot != null ? snapshot.getProductName() : null,
                             snapshot != null ? snapshot.getProductDescription() : null,
                             snapshot != null ? snapshot.getPrice() : 0,
@@ -189,6 +195,10 @@ public class OrderService {
                 order.getId(),
                 order.getMemberId(),
                 order.getStatus(),
+                order.getIssuedCouponId(),
+                order.getOriginalAmount(),
+                order.getDiscountAmount(),
+                order.getFinalAmount(),
                 order.getCreatedAt(),
                 lineInfos
         );
