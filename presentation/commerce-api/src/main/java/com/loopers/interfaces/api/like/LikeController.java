@@ -11,9 +11,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * 좋아요 API
- */
 @RestController
 @RequiredArgsConstructor
 public class LikeController {
@@ -21,7 +18,6 @@ public class LikeController {
     private final LikeService likeService;
     private final MemberService memberService;
 
-    /** 좋아요 등록 */
     @PostMapping("/api/products/{productId}/likes")
     @ResponseStatus(HttpStatus.CREATED)
     public void like(
@@ -33,7 +29,6 @@ public class LikeController {
         likeService.like(new LikeRegisterCommand(member.memberId(), productId));
     }
 
-    /** 좋아요 취소 */
     @DeleteMapping("/api/products/{productId}/likes")
     public void unlike(
             @RequestHeader("X-Loopers-LoginId") String loginId,
@@ -44,7 +39,6 @@ public class LikeController {
         likeService.unlike(member.memberId(), productId);
     }
 
-    /** 내 좋아요 목록 조회 */
     @GetMapping("/api/likes")
     public List<ProductApiResponse> getMyLikes(
             @RequestHeader("X-Loopers-LoginId") String loginId,
