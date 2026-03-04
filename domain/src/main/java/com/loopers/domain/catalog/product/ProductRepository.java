@@ -9,6 +9,8 @@ public interface ProductRepository {
 
     Optional<Product> findById(Long id);
 
+    Optional<Product> findByIdWithPessimisticLock(Long id);
+
     List<Product> findAllActive(ProductSortType sortType);
 
     List<Product> findAll();
@@ -16,4 +18,6 @@ public interface ProductRepository {
     List<Product> findAllByIdIn(List<Long> ids);
 
     void softDeleteByBrandId(Long brandId);
+
+    void updateLikesCount(Long productId, int delta);
 }

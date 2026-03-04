@@ -47,6 +47,10 @@ public class OrderLine {
         return this.quantity.isEqualTo(value);
     }
 
+    public long quantityValue() {
+        return this.quantity.getValue();
+    }
+
     public boolean hasSnapshot() {
         return this.snapshot != null;
     }

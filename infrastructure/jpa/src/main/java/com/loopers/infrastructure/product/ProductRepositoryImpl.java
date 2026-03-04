@@ -33,6 +33,11 @@ public class ProductRepositoryImpl implements ProductRepository {
     }
 
     @Override
+    public Optional<Product> findByIdWithPessimisticLock(Long id) {
+        return productJpaRepository.findByIdWithPessimisticLock(id);
+    }
+
+    @Override
     public List<Product> findAllActive(ProductSortType sortType) {
         return queryFactory
                 .selectFrom(product)
@@ -49,6 +54,11 @@ public class ProductRepositoryImpl implements ProductRepository {
     @Override
     public List<Product> findAllByIdIn(List<Long> ids) {
         return productJpaRepository.findAllByIdIn(ids);
+    }
+
+    @Override
+    public void updateLikesCount(Long productId, int delta) {
+        productJpaRepository.updateLikesCount(productId, delta);
     }
 
     @Override

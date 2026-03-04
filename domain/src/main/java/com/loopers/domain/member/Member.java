@@ -58,6 +58,18 @@ public class Member extends BaseTimeEntity {
         return getId() != null ? MemberId.of(getId()) : null;
     }
 
+    public String loginIdValue() {
+        return this.loginId.getValue();
+    }
+
+    public String nameValue() {
+        return this.name.getValue();
+    }
+
+    public String emailValue() {
+        return this.email.getValue();
+    }
+
     public boolean matchesPassword(String rawPassword, PasswordEncryptor encryptor) {
         return this.password.matches(rawPassword, encryptor);
     }

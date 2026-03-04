@@ -46,7 +46,7 @@ class BrandTest {
         // when & then
         assertThatThrownBy(() -> Brand.register(""))
                 .isInstanceOf(CoreException.class)
-                .hasMessage("이름은 1자 이상 100자 이하여야 합니다.");
+                .hasMessage(BrandExceptionMessage.Brand.INVALID_NAME.message());
     }
 
     @Test
@@ -54,7 +54,7 @@ class BrandTest {
         // when & then
         assertThatThrownBy(() -> Brand.register(null))
                 .isInstanceOf(CoreException.class)
-                .hasMessage("이름은 1자 이상 100자 이하여야 합니다.");
+                .hasMessage(BrandExceptionMessage.Brand.INVALID_NAME.message());
     }
 
     @Test
@@ -62,7 +62,7 @@ class BrandTest {
         // when & then
         assertThatThrownBy(() -> Brand.register("   "))
                 .isInstanceOf(CoreException.class)
-                .hasMessage("이름은 1자 이상 100자 이하여야 합니다.");
+                .hasMessage(BrandExceptionMessage.Brand.INVALID_NAME.message());
     }
 
     @Test
@@ -73,7 +73,7 @@ class BrandTest {
         // when & then
         assertThatThrownBy(() -> Brand.register(longName))
                 .isInstanceOf(CoreException.class)
-                .hasMessage("이름은 1자 이상 100자 이하여야 합니다.");
+                .hasMessage(BrandExceptionMessage.Brand.INVALID_NAME.message());
     }
 
     @Test
@@ -96,7 +96,7 @@ class BrandTest {
         // when & then
         assertThatThrownBy(() -> brand.updateName(""))
                 .isInstanceOf(CoreException.class)
-                .hasMessage("이름은 1자 이상 100자 이하여야 합니다.");
+                .hasMessage(BrandExceptionMessage.Brand.INVALID_NAME.message());
     }
 
     @Test
@@ -107,7 +107,7 @@ class BrandTest {
         // when & then
         assertThatThrownBy(() -> brand.updateName("a".repeat(101)))
                 .isInstanceOf(CoreException.class)
-                .hasMessage("이름은 1자 이상 100자 이하여야 합니다.");
+                .hasMessage(BrandExceptionMessage.Brand.INVALID_NAME.message());
     }
 
     @Test

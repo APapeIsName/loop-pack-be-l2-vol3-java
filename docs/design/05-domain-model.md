@@ -37,9 +37,21 @@
 - 비정규화 관계: Product.likesCount(인기도)는 Catalog BC가 소유. Like BC의 개별 레코드가 원본이며, likesCount는 BC 경계를 사유로 한 정당한 비정규화
 
 4. `Order Context`
-- 책임: 주문 생성/조회, 주문 스냅샷 보존, 수락/거절 판단
+- 책임: 주문 생성/조회, 주문 스냅샷 보존, 수락/거절 판단, 금액 계산(원금/할인/최종)
 - Aggregate: `Order` (+ `OrderLine` Entity, `OrderLineSnapshot` VO)
 - 참고: 재고 차감은 Catalog Context(Product)의 책임이며, Order Context는 ProductService를 통해 요청만 한다.
+- 쿠폰 통합: OrderService가 Coupon Context의 Repository를 통해 쿠폰 검증 및 할인 계산을 조정한다. 쿠폰 사용(IssuedCoupon.use())은 Coupon Context의 도메인 행위.
+
+5. `Coupon Context`
+- 책임: 쿠폰 템플릿 관리(CRUD), 쿠폰 발급, 할인 계산, 사용 상태 관리
+- Aggregate: `Coupon` (독립), `IssuedCoupon` (독립)
+- 모델:
+  - `Coupon(name, couponType, discountValue, minOrderAmount, expiredAt)` — 할인 정책 템플릿. SoftDeletableEntity.
+  - `CouponType(enum: FIXED, RATE)` — 할인 계산 전략. validate() + calculateDiscount() 보유.
+  - `IssuedCoupon(couponId, memberId, status, usedAt, version)` — 1회용 할인권. @Version 낙관적 락.
+  - `IssuedCouponStatus(enum: AVAILABLE, USED, EXPIRED)` — 상태 전이: AVAILABLE → USED (단방향)
+- 위임 패턴: Coupon.calculateDiscount() → CouponType.calculateDiscount() (Product → Stock 위임과 동일 구조)
+- Lock 전략: IssuedCoupon에 @Version 낙관적 락. 동시 사용 시 1건만 성공, 나머지는 OptimisticLockingFailureException.
 
 참고:
 - BC 간 참조는 객체 참조가 아닌 ID(Long) 참조만 사용한다.

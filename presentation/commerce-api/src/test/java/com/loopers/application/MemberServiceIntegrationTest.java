@@ -6,9 +6,6 @@ import com.loopers.application.service.dto.MemberInfo;
 import com.loopers.domain.member.MemberExceptionMessage;
 import com.loopers.domain.member.MemberRepository;
 import com.loopers.domain.member.PasswordEncryptor;
-import com.loopers.domain.member.vo.Email;
-import com.loopers.domain.member.vo.LoginId;
-import com.loopers.domain.member.vo.MemberName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -78,7 +75,7 @@ class MemberServiceIntegrationTest {
         MemberInfo response = memberService.getMyInfo(loginId, password);
 
         // then
-        assertThat(response.loginId()).isEqualTo(LoginId.of(loginId));
+        assertThat(response.loginId()).isEqualTo(loginId);
     }
 
     @Test
@@ -92,7 +89,7 @@ class MemberServiceIntegrationTest {
         MemberInfo response = memberService.getMyInfo(loginId, password);
 
         // then
-        assertThat(response.name()).isEqualTo(MemberName.of("공명선"));
+        assertThat(response.name()).isEqualTo("공명선");
     }
 
     @Test
@@ -106,7 +103,7 @@ class MemberServiceIntegrationTest {
         MemberInfo response = memberService.getMyInfo(loginId, password);
 
         // then
-        assertThat(response.email()).isEqualTo(Email.of("test@loopers.com"));
+        assertThat(response.email()).isEqualTo("test@loopers.com");
     }
 
     @Test

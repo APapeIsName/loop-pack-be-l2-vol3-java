@@ -16,12 +16,12 @@ public record ProductInfo(
     public static ProductInfo from(Product product, Brand brand) {
         return new ProductInfo(
                 product.getId(),
-                product.getName().getValue(),
+                product.nameValue(),
                 product.getDescription(),
-                product.getPrice().getValue(),
-                product.getStock().getValue(),
+                product.priceValue(),
+                product.stockValue(),
                 product.getLikesCount(),
-                brand != null ? brand.getName().getValue() : null
+                brand != null ? brand.nameValue() : null
         );
     }
 }

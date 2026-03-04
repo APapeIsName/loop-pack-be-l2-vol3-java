@@ -581,3 +581,146 @@ sequenceDiagram
 
 #### 읽는 포인트
 - 회원 주문 상세(3-3)와 달리 `Order.isOwnedBy()` 호출이 없다. 관리자는 모든 주문을 조회할 수 있다.
+
+---
+
+## 7. 쿠폰
+
+### 7-1. 쿠폰 발급 (사용자)
+
+```mermaid
+sequenceDiagram
+    actor M as 회원
+    participant C as CouponController
+    participant CS as CouponService
+    participant CR as CouponRepository
+    participant CP as Coupon
+    participant ICR as IssuedCouponRepository
+
+    M->>C: POST /api/v1/coupons/{couponId}/issue
+    C->>CS: 쿠폰 발급 issue(couponId, memberId)
+    CS->>CR: 쿠폰 조회 findById(couponId)
+    CR-->>CS: Coupon
+    CS->>CP: 만료 확인 isExpired()
+    CP-->>CS: boolean
+    CS->>ICR: 발급 저장 save(IssuedCoupon.issue(couponId, memberId))
+    ICR-->>CS: IssuedCoupon
+    CS-->>C: IssuedCouponInfo
+    C-->>M: 201 Created
+```
+
+### 7-2. 내 쿠폰 목록 조회
+
+```mermaid
+sequenceDiagram
+    actor M as 회원
+    participant C as CouponController
+    participant CS as CouponService
+    participant ICR as IssuedCouponRepository
+
+    M->>C: GET /api/v1/users/me/coupons
+    C->>CS: 내 발급 쿠폰 조회 getMyIssuedCoupons(memberId)
+    CS->>ICR: 회원별 조회 findByMemberId(memberId)
+    ICR-->>CS: List~IssuedCoupon~
+    CS-->>C: List~IssuedCouponInfo~
+    C-->>M: 200 OK
+```
+
+### 7-3. 쿠폰 적용 주문 (주문 시퀀스 확장)
+
+```mermaid
+sequenceDiagram
+    actor M as 회원
+    participant C as OrderController
+    participant OS as OrderService
+    participant PR as ProductRepository
+    participant P as Product
+    participant ICR as IssuedCouponRepository
+    participant IC as IssuedCoupon
+    participant CR as CouponRepository
+    participant CP as Coupon
+    participant OR as OrderRepository
+
+    M->>C: POST /api/orders {items, couponId}
+    C->>OS: 주문 생성 create(command)
+    OS->>OS: productId 정렬 (데드락 방지)
+
+    loop 각 상품 (오름차순)
+        OS->>PR: 비관적 락 조회 findByIdWithPessimisticLock(productId)
+        PR-->>OS: Product (FOR UPDATE)
+    end
+
+    OS->>OS: originalAmount 계산 (Σ price × quantity)
+
+    opt couponId != null
+        OS->>ICR: 발급쿠폰 조회 findById(issuedCouponId)
+        ICR-->>OS: IssuedCoupon
+        OS->>IC: 소유자 확인 isOwnedBy(memberId)
+        OS->>IC: 사용 가능 확인 isAvailable()
+        OS->>CR: 템플릿 조회 findById(couponId)
+        CR-->>OS: Coupon
+        OS->>CP: 만료 확인 isExpired()
+        OS->>CP: 적용 가능 확인 isApplicableTo(originalAmount)
+        OS->>CP: 할인 계산 calculateDiscount(originalAmount)
+        CP-->>OS: discountAmount
+    end
+
+    alt 모든 재고 충분 (ACCEPTED)
+        loop 각 상품
+            OS->>P: decreaseStock(quantity)
+        end
+        opt 쿠폰 있음
+            OS->>IC: use() (AVAILABLE→USED, @Version 낙관적 락)
+        end
+        OS->>OR: 수락 주문 저장 (originalAmount, discountAmount, finalAmount)
+    else 재고 부족 (REJECTED)
+        OS->>OR: 거절 주문 저장 (쿠폰 미사용)
+    end
+
+    OS-->>C: OrderInfo
+    C-->>M: 201 Created
+```
+
+#### 읽는 포인트
+- **비관적 락**: Product는 `findByIdWithPessimisticLock`으로 재고/좋아요 정합성 보장.
+- **낙관적 락**: IssuedCoupon은 `@Version`으로 동시 사용 방지. 충돌 시 `OptimisticLockingFailureException` → `CoreException(CONFLICT)`.
+- **데드락 방지**: productId를 정렬하여 항상 같은 순서로 비관적 락 획득.
+- **쿠폰 미사용 조건**: 주문 거절(REJECTED) 시 쿠폰을 사용하지 않는다.
+
+---
+
+## 8. 관리자 — 쿠폰 관리
+
+### 8-1. 쿠폰 등록
+
+```mermaid
+sequenceDiagram
+    actor A as 관리자
+    participant C as AdminCouponController
+    participant CS as CouponService
+    participant CR as CouponRepository
+
+    A->>C: POST /api-admin/v1/coupons {name, type, value, minAmt, expAt}
+    C->>CS: 쿠폰 등록 create(command)
+    CS->>CR: 저장 save(Coupon.publish(...))
+    CR-->>CS: Coupon
+    CS-->>C: CouponInfo
+    C-->>A: 201 Created
+```
+
+### 8-2. 쿠폰 발급 내역 조회
+
+```mermaid
+sequenceDiagram
+    actor A as 관리자
+    participant C as AdminCouponController
+    participant CS as CouponService
+    participant ICR as IssuedCouponRepository
+
+    A->>C: GET /api-admin/v1/coupons/{couponId}/issues
+    C->>CS: 발급 내역 조회 getIssuedCouponsByCouponId(couponId)
+    CS->>ICR: 쿠폰별 조회 findAllByCouponId(couponId)
+    ICR-->>CS: List~IssuedCoupon~
+    CS-->>C: List~IssuedCouponInfo~
+    C-->>A: 200 OK
+```

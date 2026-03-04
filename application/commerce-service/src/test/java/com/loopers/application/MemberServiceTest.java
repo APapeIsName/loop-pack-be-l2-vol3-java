@@ -5,7 +5,6 @@ import com.loopers.application.service.dto.MemberRegisterCommand;
 import com.loopers.application.service.dto.MemberInfo;
 import com.loopers.domain.member.*;
 import com.loopers.domain.member.vo.LoginId;
-import com.loopers.domain.member.vo.MemberName;
 import com.loopers.domain.member.vo.Password;
 import com.loopers.domain.member.PasswordEncryptor;
 import org.junit.jupiter.api.Test;
@@ -90,7 +89,7 @@ class MemberServiceTest {
         MemberInfo response = memberService.getMyInfo(loginId, password);
 
         // then
-        assertThat(response.loginId()).isEqualTo(LoginId.of(loginId));
+        assertThat(response.loginId()).isEqualTo(loginId);
     }
 
     @Test
@@ -105,7 +104,7 @@ class MemberServiceTest {
         MemberInfo response = memberService.getMyInfo(loginId, password);
 
         // then
-        assertThat(response.name()).isEqualTo(MemberName.of("홍길동"));
+        assertThat(response.name()).isEqualTo("홍길동");
     }
 
     @Test

@@ -4,6 +4,7 @@ import java.util.List;
 
 public record OrderCreateCommand(
         Long memberId,
-        List<OrderLineRequest> orderLines
+        List<OrderLineRequest> orderLines,
+        Long issuedCouponId
 ) {
 }

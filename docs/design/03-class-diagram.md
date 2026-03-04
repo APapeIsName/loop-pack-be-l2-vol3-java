@@ -82,8 +82,16 @@ classDiagram
     class Order {
         -Long memberId
         -OrderStatus status
-        +place(memberId, orderLines, status)$ Order
+        -Long issuedCouponId
+        -long originalAmount
+        -long discountAmount
+        -long finalAmount
+        +place(memberId, orderLines, status, issuedCouponId, originalAmount, discountAmount, finalAmount)$ Order
         +isOwnedBy(memberId) boolean
+        +hasCouponApplied() boolean
+        +hasOriginalAmount(long) boolean
+        +hasDiscountAmount(long) boolean
+        +hasFinalAmount(long) boolean
         +assignOrderLines(orderLines) List~OrderLine~
     }
 
@@ -111,6 +119,63 @@ classDiagram
         ACCEPTED
         REJECTED
     }
+
+    %% ── 쿠폰 ──
+
+    class Coupon {
+        -Name name
+        -CouponType couponType
+        -long discountValue
+        -Long minOrderAmount
+        -ZonedDateTime expiredAt
+        +publish(name, type, value, minAmt, expAt)$ Coupon
+        +isExpired() boolean
+        +isApplicableTo(long orderAmount) boolean
+        +calculateDiscount(long orderAmount) long
+        +update(name, type, value, minAmt, expAt) void
+        +hasName(String) boolean
+        +hasType(CouponType) boolean
+    }
+
+    class CouponType {
+        <<enumeration>>
+        FIXED
+        RATE
+        +validate(long discountValue) void
+        +calculateDiscount(long discountValue, long orderAmount) long
+    }
+
+    class IssuedCoupon {
+        -Long couponId
+        -Long memberId
+        -IssuedCouponStatus status
+        -ZonedDateTime usedAt
+        -long version
+        +issue(couponId, memberId)$ IssuedCoupon
+        +isAvailable() boolean
+        +isUsed() boolean
+        +isOwnedBy(Long memberId) boolean
+        +use() void
+        +belongsToCoupon(Long couponId) boolean
+    }
+
+    class IssuedCouponStatus {
+        <<enumeration>>
+        AVAILABLE
+        USED
+        EXPIRED
+    }
+
+    note for Coupon "할인 정책 템플릿\ncalculateDiscount → CouponType에 위임\nSoftDeletableEntity 상속"
+    note for IssuedCoupon "회원에게 할당된 1회용 할인권\nuse(): AVAILABLE→USED 단방향 전이\n@Version 낙관적 락으로 동시 사용 방지"
+    note for CouponType "할인 계산 전략\nFIXED: min(value, amount)\nRATE: amount * value / 100"
+
+    Coupon --> CouponType : couponType
+    Coupon *-- Name : name (VO)
+    IssuedCoupon --> IssuedCouponStatus : status
+    IssuedCoupon ..> Coupon : couponId (Long)
+    IssuedCoupon ..> Member : memberId (Long)
+    Order ..> IssuedCoupon : issuedCouponId (Long, nullable)
 
     %% ── VO 포함 (Composition) ──
     Product *-- Stock : stock

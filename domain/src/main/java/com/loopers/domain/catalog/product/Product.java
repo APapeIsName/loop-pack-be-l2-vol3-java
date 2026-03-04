@@ -4,7 +4,7 @@ import com.loopers.domain.SoftDeletableEntity;
 import com.loopers.domain.catalog.product.vo.Money;
 import com.loopers.domain.catalog.product.vo.Quantity;
 import com.loopers.domain.catalog.product.vo.Stock;
-import com.loopers.domain.catalog.vo.Name;
+import com.loopers.domain.common.vo.Name;
 import com.loopers.support.error.CoreException;
 import com.loopers.support.error.ErrorType;
 import jakarta.persistence.*;
@@ -83,16 +83,24 @@ public class Product extends SoftDeletableEntity {
         return this.stock.isEnough(quantity);
     }
 
-    public void increaseLikesCount() {
-        this.likesCount++;
-    }
-
-    public void decreaseLikesCount() {
-        this.likesCount = Math.max(0, this.likesCount - 1);
-    }
-
     public boolean hasLikesCount(long value) {
         return this.likesCount == value;
+    }
+
+    public String nameValue() {
+        return this.name.getValue();
+    }
+
+    public long priceValue() {
+        return this.price.getValue();
+    }
+
+    public long stockValue() {
+        return this.stock.getValue();
+    }
+
+    public long totalPrice(long quantity) {
+        return this.price.getValue() * quantity;
     }
 
     private void guardNotDeleted() {

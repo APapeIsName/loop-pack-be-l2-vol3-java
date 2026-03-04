@@ -60,8 +60,22 @@ class OrderE2ETest {
                                 new OrderCreateApiRequest(List.of(
                                         new OrderLineItemRequest(productId1, 2),
                                         new OrderLineItemRequest(productId2, 1)
-                                )))))
-                .andExpect(status().isCreated())
+                                ), null))))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void 주문_생성_재고_충분하면_수락_상태() throws Exception {
+        // when & then
+        mockMvc.perform(post("/api/orders")
+                        .header("X-Loopers-LoginId", LOGIN_ID)
+                        .header("X-Loopers-LoginPw", PASSWORD)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new OrderCreateApiRequest(List.of(
+                                        new OrderLineItemRequest(productId1, 2),
+                                        new OrderLineItemRequest(productId2, 1)
+                                ), null))))
                 .andExpect(jsonPath("$.status").value("ACCEPTED"));
     }
 
@@ -75,13 +89,26 @@ class OrderE2ETest {
                         .content(objectMapper.writeValueAsString(
                                 new OrderCreateApiRequest(List.of(
                                         new OrderLineItemRequest(productId1, 999)
-                                )))))
-                .andExpect(status().isCreated())
+                                ), null))))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void 주문_생성_재고_부족하면_거절_상태() throws Exception {
+        // when & then
+        mockMvc.perform(post("/api/orders")
+                        .header("X-Loopers-LoginId", LOGIN_ID)
+                        .header("X-Loopers-LoginPw", PASSWORD)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new OrderCreateApiRequest(List.of(
+                                        new OrderLineItemRequest(productId1, 999)
+                                ), null))))
                 .andExpect(jsonPath("$.status").value("REJECTED"));
     }
 
     @Test
-    void 주문_생성_시_스냅샷_포함() throws Exception {
+    void 주문_생성_시_스냅샷_상품명_포함() throws Exception {
         // when & then
         mockMvc.perform(post("/api/orders")
                         .header("X-Loopers-LoginId", LOGIN_ID)
@@ -90,9 +117,21 @@ class OrderE2ETest {
                         .content(objectMapper.writeValueAsString(
                                 new OrderCreateApiRequest(List.of(
                                         new OrderLineItemRequest(productId1, 1)
-                                )))))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.orderLines[0].productName").value("에어맥스"))
+                                ), null))))
+                .andExpect(jsonPath("$.orderLines[0].productName").value("에어맥스"));
+    }
+
+    @Test
+    void 주문_생성_시_스냅샷_브랜드명_포함() throws Exception {
+        // when & then
+        mockMvc.perform(post("/api/orders")
+                        .header("X-Loopers-LoginId", LOGIN_ID)
+                        .header("X-Loopers-LoginPw", PASSWORD)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new OrderCreateApiRequest(List.of(
+                                        new OrderLineItemRequest(productId1, 1)
+                                ), null))))
                 .andExpect(jsonPath("$.orderLines[0].brandName").value("나이키"));
     }
 
@@ -105,7 +144,6 @@ class OrderE2ETest {
         mockMvc.perform(get("/api/orders")
                         .header("X-Loopers-LoginId", LOGIN_ID)
                         .header("X-Loopers-LoginPw", PASSWORD))
-                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1));
     }
 
@@ -118,7 +156,6 @@ class OrderE2ETest {
         mockMvc.perform(get("/api/orders/{id}", orderId)
                         .header("X-Loopers-LoginId", LOGIN_ID)
                         .header("X-Loopers-LoginPw", PASSWORD))
-                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.orderLines.length()").value(1));
     }
 
@@ -130,7 +167,6 @@ class OrderE2ETest {
 
         // when & then
         mockMvc.perform(get("/api/admin/orders"))
-                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2));
     }
 
@@ -141,7 +177,6 @@ class OrderE2ETest {
 
         // when & then
         mockMvc.perform(get("/api/admin/orders/{id}", orderId))
-                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(orderId));
     }
 
@@ -185,7 +220,7 @@ class OrderE2ETest {
                 .header("X-Loopers-LoginId", LOGIN_ID)
                 .header("X-Loopers-LoginPw", PASSWORD)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(new OrderCreateApiRequest(items))));
+                .content(objectMapper.writeValueAsString(new OrderCreateApiRequest(items, null))));
     }
 
     private Long 주문을_생성하고_ID를_반환한다(List<OrderLineItemRequest> items) throws Exception {
@@ -193,7 +228,7 @@ class OrderE2ETest {
                         .header("X-Loopers-LoginId", LOGIN_ID)
                         .header("X-Loopers-LoginPw", PASSWORD)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new OrderCreateApiRequest(items))))
+                        .content(objectMapper.writeValueAsString(new OrderCreateApiRequest(items, null))))
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(response).get("id").asLong();
     }

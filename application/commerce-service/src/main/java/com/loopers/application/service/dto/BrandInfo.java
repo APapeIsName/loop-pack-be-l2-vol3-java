@@ -7,6 +7,6 @@ public record BrandInfo(
         String name
 ) {
     public static BrandInfo from(Brand brand) {
-        return new BrandInfo(brand.getId(), brand.getName().getValue());
+        return new BrandInfo(brand.getId(), brand.nameValue());
     }
 }

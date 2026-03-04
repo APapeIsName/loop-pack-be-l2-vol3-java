@@ -23,15 +23,33 @@ public class Order extends BaseTimeEntity {
     @Column(name = "status", nullable = false)
     private OrderStatus status;
 
-    private Order(Long memberId, OrderStatus status) {
+    @Column(name = "issued_coupon_id")
+    private Long issuedCouponId;
+
+    @Column(name = "original_amount", nullable = false)
+    private long originalAmount;
+
+    @Column(name = "discount_amount", nullable = false)
+    private long discountAmount;
+
+    @Column(name = "final_amount", nullable = false)
+    private long finalAmount;
+
+    private Order(Long memberId, OrderStatus status, Long issuedCouponId,
+                  long originalAmount, long discountAmount, long finalAmount) {
         this.memberId = memberId;
         this.status = status;
+        this.issuedCouponId = issuedCouponId;
+        this.originalAmount = originalAmount;
+        this.discountAmount = discountAmount;
+        this.finalAmount = finalAmount;
     }
 
-    public static Order place(Long memberId, List<OrderLine> orderLines, OrderStatus status) {
+    public static Order place(Long memberId, List<OrderLine> orderLines, OrderStatus status,
+                              Long issuedCouponId, long originalAmount, long discountAmount, long finalAmount) {
         validateNotEmpty(orderLines);
         validateNoDuplicateProducts(orderLines);
-        return new Order(memberId, status);
+        return new Order(memberId, status, issuedCouponId, originalAmount, discountAmount, finalAmount);
     }
 
     public boolean isAccepted() {
@@ -40,6 +58,22 @@ public class Order extends BaseTimeEntity {
 
     public boolean isOwnedBy(Long memberId) {
         return this.memberId.equals(memberId);
+    }
+
+    public boolean hasCouponApplied() {
+        return this.issuedCouponId != null;
+    }
+
+    public boolean hasOriginalAmount(long amount) {
+        return this.originalAmount == amount;
+    }
+
+    public boolean hasDiscountAmount(long amount) {
+        return this.discountAmount == amount;
+    }
+
+    public boolean hasFinalAmount(long amount) {
+        return this.finalAmount == amount;
     }
 
     public List<OrderLine> assignOrderLines(List<OrderLine> orderLines) {

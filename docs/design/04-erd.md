@@ -49,11 +49,37 @@ erDiagram
         DATETIME updated_at "NOT NULL"
     }
 
+    coupon {
+        BIGINT id PK "AUTO_INCREMENT"
+        VARCHAR name "NOT NULL"
+        VARCHAR coupon_type "NOT NULL (FIXED/RATE)"
+        BIGINT discount_value "NOT NULL"
+        BIGINT min_order_amount "nullable"
+        DATETIME expired_at "NOT NULL"
+        DATETIME created_at "NOT NULL"
+        DATETIME updated_at "NOT NULL"
+        DATETIME deleted_at "nullable (soft-delete)"
+    }
+
+    issued_coupon {
+        BIGINT id PK "AUTO_INCREMENT"
+        BIGINT coupon_id "NOT NULL"
+        BIGINT member_id "NOT NULL"
+        VARCHAR status "NOT NULL (AVAILABLE/USED/EXPIRED)"
+        DATETIME used_at "nullable"
+        BIGINT version "NOT NULL (@Version)"
+        DATETIME created_at "NOT NULL"
+        DATETIME updated_at "NOT NULL"
+    }
+
     orders {
         BIGINT id PK "AUTO_INCREMENT"
         BIGINT member_id "NOT NULL"
         VARCHAR status "NOT NULL"
-        DATETIME ordered_at "NOT NULL"
+        BIGINT issued_coupon_id "nullable"
+        BIGINT original_amount "NOT NULL"
+        BIGINT discount_amount "NOT NULL"
+        BIGINT final_amount "NOT NULL"
         DATETIME created_at "NOT NULL"
         DATETIME updated_at "NOT NULL"
     }
@@ -79,6 +105,9 @@ erDiagram
     member ||--o{ orders : "member_id"
     orders ||--o{ order_line : "order_id"
     order_line ||--|| order_line_snapshot : "order_line_id"
+    coupon ||--o{ issued_coupon : "coupon_id"
+    member ||--o{ issued_coupon : "member_id"
+    issued_coupon |o--o| orders : "issued_coupon_id"
 ```
 
 > **관계선 = 논리 참조**. DB에 FK 제약조건은 존재하지 않는다. 참조 무결성은 애플리케이션 레벨에서 보장한다.

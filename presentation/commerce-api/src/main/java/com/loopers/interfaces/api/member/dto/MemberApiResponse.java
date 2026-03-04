@@ -13,10 +13,10 @@ public record MemberApiResponse(
 
     public static MemberApiResponse from(MemberInfo info) {
         return new MemberApiResponse(
-                info.loginId().getValue(),
-                maskName(info.name().getValue()),
+                info.loginId(),
+                maskName(info.name()),
                 info.birthdate(),
-                info.email().getValue()
+                info.email()
         );
     }
 

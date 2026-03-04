@@ -9,6 +9,10 @@ public record OrderInfo(
         Long orderId,
         Long memberId,
         OrderStatus status,
+        Long issuedCouponId,
+        long originalAmount,
+        long discountAmount,
+        long finalAmount,
         ZonedDateTime createdAt,
         List<OrderLineInfo> orderLines
 ) {

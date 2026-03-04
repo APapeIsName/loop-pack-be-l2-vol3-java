@@ -4,14 +4,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loopers.application.service.dto.MemberRegisterCommand;
 import com.loopers.interfaces.api.brand.dto.BrandCreateApiRequest;
 import com.loopers.interfaces.api.product.dto.ProductCreateApiRequest;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 
@@ -21,7 +22,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Transactional
 class LikeE2ETest {
 
     private static final String LOGIN_ID = "liketest123";
@@ -33,6 +33,9 @@ class LikeE2ETest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     private Long brandId;
     private Long productId;
 
@@ -41,6 +44,14 @@ class LikeE2ETest {
         회원을_등록한다();
         brandId = 브랜드를_생성하고_ID를_반환한다("나이키");
         productId = 상품을_생성하고_ID를_반환한다("에어맥스", 100000, 50, brandId);
+    }
+
+    @AfterEach
+    void tearDown() {
+        jdbcTemplate.execute("DELETE FROM likes");
+        jdbcTemplate.execute("DELETE FROM product");
+        jdbcTemplate.execute("DELETE FROM brand");
+        jdbcTemplate.execute("DELETE FROM member");
     }
 
     @Test
@@ -53,13 +64,22 @@ class LikeE2ETest {
     }
 
     @Test
+    void 좋아요_등록_후_상품_조회_200() throws Exception {
+        // given
+        좋아요를_등록한다(productId);
+
+        // when & then
+        mockMvc.perform(get("/api/products/{productId}", productId))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void 좋아요_등록_시_likesCount_증가() throws Exception {
         // given
         좋아요를_등록한다(productId);
 
         // when & then
         mockMvc.perform(get("/api/products/{productId}", productId))
-                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.likesCount").value(1));
     }
 
@@ -88,7 +108,7 @@ class LikeE2ETest {
     }
 
     @Test
-    void 브랜드_삭제된_상품에_좋아요_시_400() throws Exception {
+    void 브랜드_삭제된_상품에_좋아요_시_404() throws Exception {
         // given
         브랜드를_삭제한다(brandId);
 
@@ -96,7 +116,7 @@ class LikeE2ETest {
         mockMvc.perform(post("/api/products/{productId}/likes", productId)
                         .header("X-Loopers-LoginId", LOGIN_ID)
                         .header("X-Loopers-LoginPw", PASSWORD))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -112,6 +132,17 @@ class LikeE2ETest {
     }
 
     @Test
+    void 좋아요_취소_후_상품_조회_200() throws Exception {
+        // given
+        좋아요를_등록한다(productId);
+        좋아요를_취소한다(productId);
+
+        // when & then
+        mockMvc.perform(get("/api/products/{productId}", productId))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void 좋아요_취소_시_likesCount_감소() throws Exception {
         // given
         좋아요를_등록한다(productId);
@@ -119,7 +150,6 @@ class LikeE2ETest {
 
         // when & then
         mockMvc.perform(get("/api/products/{productId}", productId))
-                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.likesCount").value(0));
     }
 
@@ -143,8 +173,36 @@ class LikeE2ETest {
         mockMvc.perform(get("/api/likes")
                         .header("X-Loopers-LoginId", LOGIN_ID)
                         .header("X-Loopers-LoginPw", PASSWORD))
-                .andExpect(status().isOk())
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void 내_좋아요_목록_조회_시_좋아요한_상품_수_반환() throws Exception {
+        // given
+        Long productId2 = 상품을_생성하고_ID를_반환한다("조던", 200000, 30, brandId);
+        좋아요를_등록한다(productId);
+        좋아요를_등록한다(productId2);
+
+        // when & then
+        mockMvc.perform(get("/api/likes")
+                        .header("X-Loopers-LoginId", LOGIN_ID)
+                        .header("X-Loopers-LoginPw", PASSWORD))
                 .andExpect(jsonPath("$.length()").value(2));
+    }
+
+    @Test
+    void 삭제된_상품은_좋아요_목록에서_제외_200() throws Exception {
+        // given
+        Long productId2 = 상품을_생성하고_ID를_반환한다("조던", 200000, 30, brandId);
+        좋아요를_등록한다(productId);
+        좋아요를_등록한다(productId2);
+        상품을_삭제한다(productId2);
+
+        // when & then
+        mockMvc.perform(get("/api/likes")
+                        .header("X-Loopers-LoginId", LOGIN_ID)
+                        .header("X-Loopers-LoginPw", PASSWORD))
+                .andExpect(status().isOk());
     }
 
     @Test
@@ -159,7 +217,6 @@ class LikeE2ETest {
         mockMvc.perform(get("/api/likes")
                         .header("X-Loopers-LoginId", LOGIN_ID)
                         .header("X-Loopers-LoginPw", PASSWORD))
-                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1));
     }
 

@@ -49,10 +49,10 @@ public class MemberService {
 
         return new MemberInfo(
                 member.getId(),
-                member.getLoginId(),
-                member.getName(),
+                member.loginIdValue(),
+                member.nameValue(),
                 member.getBirthDate(),
-                member.getEmail()
+                member.emailValue()
         );
     }
 
