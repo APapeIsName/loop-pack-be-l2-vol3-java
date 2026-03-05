@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import com.loopers.support.error.CoreException;
 import com.loopers.support.error.ErrorType;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -106,6 +108,18 @@ public class ApiControllerAdvice {
     @ExceptionHandler
     public ResponseEntity<ApiResponse<?>> handleNotFound(NoResourceFoundException e) {
         return failureResponse(ErrorType.NOT_FOUND, null);
+    }
+
+    @ExceptionHandler
+    public ResponseEntity<ApiResponse<?>> handle(DataIntegrityViolationException e) {
+        log.warn("DataIntegrityViolationException : {}", e.getMessage(), e);
+        return failureResponse(ErrorType.CONFLICT, "이미 존재하는 데이터입니다.");
+    }
+
+    @ExceptionHandler
+    public ResponseEntity<ApiResponse<?>> handle(OptimisticLockingFailureException e) {
+        log.warn("OptimisticLockingFailureException : {}", e.getMessage(), e);
+        return failureResponse(ErrorType.CONFLICT, "동시 요청으로 인해 처리에 실패했습니다. 다시 시도해주세요.");
     }
 
     @ExceptionHandler

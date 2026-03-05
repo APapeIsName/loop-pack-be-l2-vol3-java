@@ -18,7 +18,9 @@ import java.time.LocalDate;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(name = "member")
+@Table(name = "member", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_member_login_id", columnNames = "login_id")
+})
 public class Member extends BaseTimeEntity {
 
     @Embedded
