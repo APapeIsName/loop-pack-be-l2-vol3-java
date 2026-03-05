@@ -15,6 +15,8 @@ import com.loopers.domain.coupon.CouponRepository;
 import com.loopers.domain.coupon.CouponType;
 import com.loopers.domain.coupon.IssuedCoupon;
 import com.loopers.domain.coupon.IssuedCouponRepository;
+import com.loopers.domain.order.Order;
+import com.loopers.domain.order.OrderRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,6 +51,9 @@ class CouponConcurrencyTest {
     private IssuedCouponRepository issuedCouponRepository;
 
     @Autowired
+    private OrderRepository orderRepository;
+
+    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @AfterEach
@@ -76,28 +81,29 @@ class CouponConcurrencyTest {
 
         int threadCount = 2;
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
-        CountDownLatch latch = new CountDownLatch(threadCount);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch endLatch = new CountDownLatch(threadCount);
         AtomicInteger successCount = new AtomicInteger(0);
-        AtomicInteger failCount = new AtomicInteger(0);
 
         // when
         for (int i = 0; i < threadCount; i++) {
             executor.submit(() -> {
                 try {
+                    startLatch.await();
                     orderService.create(new OrderCreateCommand(
                             5000L,
                             List.of(new OrderLineRequest(product.getId(), 1)),
                             issuedCoupon.getId()
                     ));
                     successCount.incrementAndGet();
-                } catch (Exception e) {
-                    failCount.incrementAndGet();
+                } catch (Exception ignored) {
                 } finally {
-                    latch.countDown();
+                    endLatch.countDown();
                 }
             });
         }
-        latch.await();
+        startLatch.countDown();
+        endLatch.await();
         executor.shutdown();
 
         // then
@@ -118,13 +124,15 @@ class CouponConcurrencyTest {
 
         int threadCount = 2;
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
-        CountDownLatch latch = new CountDownLatch(threadCount);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch endLatch = new CountDownLatch(threadCount);
         AtomicInteger failCount = new AtomicInteger(0);
 
         // when
         for (int i = 0; i < threadCount; i++) {
             executor.submit(() -> {
                 try {
+                    startLatch.await();
                     orderService.create(new OrderCreateCommand(
                             6000L,
                             List.of(new OrderLineRequest(product.getId(), 1)),
@@ -133,11 +141,12 @@ class CouponConcurrencyTest {
                 } catch (Exception e) {
                     failCount.incrementAndGet();
                 } finally {
-                    latch.countDown();
+                    endLatch.countDown();
                 }
             });
         }
-        latch.await();
+        startLatch.countDown();
+        endLatch.await();
         executor.shutdown();
 
         // then
@@ -158,12 +167,14 @@ class CouponConcurrencyTest {
 
         int threadCount = 2;
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
-        CountDownLatch latch = new CountDownLatch(threadCount);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch endLatch = new CountDownLatch(threadCount);
 
         // when
         for (int i = 0; i < threadCount; i++) {
             executor.submit(() -> {
                 try {
+                    startLatch.await();
                     orderService.create(new OrderCreateCommand(
                             7000L,
                             List.of(new OrderLineRequest(product.getId(), 1)),
@@ -171,15 +182,58 @@ class CouponConcurrencyTest {
                     ));
                 } catch (Exception ignored) {
                 } finally {
-                    latch.countDown();
+                    endLatch.countDown();
                 }
             });
         }
-        latch.await();
+        startLatch.countDown();
+        endLatch.await();
         executor.shutdown();
 
         // then
         IssuedCoupon updated = issuedCouponRepository.findById(issuedCoupon.getId()).orElseThrow();
         assertThat(updated.isUsed()).isTrue();
+    }
+
+    @Test
+    void 같은_발급쿠폰_동시_사용_실패_시_주문은_하나만_생성된다() throws InterruptedException {
+        // given
+        Brand brand = brandRepository.save(Brand.register("롤백브랜드"));
+        Product product = productRepository.save(
+                Product.register("롤백상품", "설명", Money.of(50000), Stock.of(100), brand.getId()));
+
+        Coupon coupon = couponRepository.save(
+                Coupon.publish("롤백쿠폰", CouponType.FIXED, 3000, null, ZonedDateTime.now().plusDays(30)));
+        IssuedCoupon issuedCoupon = issuedCouponRepository.save(
+                IssuedCoupon.issue(coupon.getId(), 8000L));
+
+        int threadCount = 2;
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch endLatch = new CountDownLatch(threadCount);
+
+        // when
+        for (int i = 0; i < threadCount; i++) {
+            executor.submit(() -> {
+                try {
+                    startLatch.await();
+                    orderService.create(new OrderCreateCommand(
+                            8000L,
+                            List.of(new OrderLineRequest(product.getId(), 1)),
+                            issuedCoupon.getId()
+                    ));
+                } catch (Exception ignored) {
+                } finally {
+                    endLatch.countDown();
+                }
+            });
+        }
+        startLatch.countDown();
+        endLatch.await();
+        executor.shutdown();
+
+        // then
+        List<Order> orders = orderRepository.findByMemberId(8000L);
+        assertThat(orders).hasSize(1);
     }
 }

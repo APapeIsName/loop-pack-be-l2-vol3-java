@@ -14,6 +14,7 @@
 5. [Member/Brand — Check-then-Act 레이스 컨디션과 UK Constraint](#5-memberbrand--check-then-act-레이스-컨디션과-uk-constraint)
 6. [전체 쓰기 작업 동시성 감사 결과](#6-전체-쓰기-작업-동시성-감사-결과)
 7. [채택하지 않은 대안들](#7-채택하지-않은-대안들)
+8. [영속성 컨텍스트 vs 원자적 SQL — 동작 원리와 trade-off](#8-영속성-컨텍스트-vs-원자적-sql--동작-원리와-trade-off)
 
 ---
 
@@ -333,6 +334,70 @@ Optional<IssuedCoupon> findByIdForUpdate(Long id);
 - 동일 발급쿠폰 동시 사용은 드문 경합
 - 비관적 락은 경합 없을 때도 항상 `SELECT ... FOR UPDATE` 비용 발생
 - 낙관적 락(@Version)이 드문 경합에 더 적합
+
+---
+
+## 8. 영속성 컨텍스트 vs 원자적 SQL — 동작 원리와 trade-off
+
+### 왜 엔티티 메서드(dirty checking)로 좋아요 카운트를 처리하지 않는가
+
+JPA dirty checking은 flush 시점에 **절대값 할당 SQL**을 생성한다:
+
+```java
+Product product = productRepository.findById(id);  // SELECT → likesCount = 5
+product.increaseLike();                              // 메모리에서 6으로 변경
+// flush 시점 → UPDATE SET likes_count = 6 WHERE id = ?
+```
+
+이 SQL은 DB의 현재 값과 무관하게 `6`으로 덮어쓴다. 동시 요청 시:
+
+| 시점 | 스레드 A | 스레드 B | DB |
+|------|----------|----------|----|
+| T1 | SELECT → 5 | SELECT → 5 | 5 |
+| T2 | 메모리 6 | 메모리 6 | 5 |
+| T3 | flush → `SET = 6` | | **6** |
+| T4 | | flush → `SET = 6` | **6** (Lost Update) |
+
+반면 원자적 SQL(`SET likes_count = likes_count + 1`)은 DB 엔진 내부에서 읽기+쓰기를 하나의 원자적 연산으로 처리한다. Read-Modify-Write 사이에 다른 트랜잭션이 끼어들 틈이 없다.
+
+### 원자적 SQL의 trade-off
+
+1. **영속성 컨텍스트 불일치**: DB는 업데이트되었지만, 1차 캐시의 엔티티는 이전 값을 유지한다. `@Modifying(clearAutomatically = true)`로 해결하나, 관리 중이던 **모든 엔티티가 detach**되는 부작용이 있다.
+2. **도메인 로직 누출**: `likesCount + 1` 규칙이 SQL에 존재하고, Product 엔티티는 자기 likesCount 변경 방식을 모른다.
+
+### 주문(재고 차감)에서 원자적 SQL을 쓸 수 없는 이유
+
+주문 흐름에서는 Product 엔티티가 재고 차감 이후에도 계속 필요하다 (주문라인 생성에 상품명, 가격, 브랜드ID 사용):
+
+```
+1. SELECT products (영속성 컨텍스트에 로딩)
+2. 상품 정보로 주문라인, 금액 계산
+3. 원자적 UPDATE stock = stock - :qty WHERE stock >= :qty  ← clearAutomatically = true
+4. 주문라인 생성 ← 1번 엔티티가 필요한데, 3번에서 detach됨!
+```
+
+- `clearAutomatically = true` → 1번에서 로딩한 엔티티 전부 detach → 4번 불가
+- `clearAutomatically = false` → dirty checking이 옛날 stock 값으로 덮어쓸 위험
+
+좋아요는 원자적 UPDATE 이후에 Product 엔티티가 필요 없었기 때문에 clear가 문제되지 않았다. 주문에서는 **엔티티가 트랜잭션 전체에 걸쳐 살아 있어야 하므로** 비관적 락 + dirty checking이 더 적합하다.
+
+### 대안 — 예약(Reservation) 시스템
+
+주문 접수와 처리를 분리하면 원자적 SQL 사용이 가능해진다:
+
+```
+TX1: [주문 요청] → 주문 생성 (PENDING) + 스냅샷 저장   ← 락 없음, 빠름
+TX2: [비동기 처리] → 원자적 재고 차감 → 쿠폰 사용 → 상태 변경 (ACCEPTED/REJECTED)
+```
+
+TX2에서는 이미 TX1에서 스냅샷을 떴으므로 Product 엔티티가 불필요하다. 원자적 SQL + clear가 문제되지 않는다.
+
+**trade-off**:
+- 사용자가 즉시 결과를 모른다 (PENDING → 이후 알림)
+- 보상 트랜잭션 필요 (재고 부족 시 REJECTED + 쿠폰 복원)
+- 시스템 복잡도 증가 (메시지 큐, 상태 머신, 재시도 로직)
+
+**현재 판단**: 비관적 락의 경합이 병목으로 관측되기 전까지는 단일 TX가 더 단순하고 안전하다. 병목 관측 시 예약 시스템으로의 전환을 재검토한다.
 
 ---
 

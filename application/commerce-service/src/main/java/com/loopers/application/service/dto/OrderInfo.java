@@ -19,4 +19,8 @@ public record OrderInfo(
     public boolean isAccepted() {
         return this.status == OrderStatus.ACCEPTED;
     }
+
+    public boolean isRejected() {
+        return this.status == OrderStatus.REJECTED;
+    }
 }

@@ -58,7 +58,8 @@ class StockConcurrencyTest {
 
         int threadCount = 10;
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
-        CountDownLatch latch = new CountDownLatch(threadCount);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch endLatch = new CountDownLatch(threadCount);
         List<OrderInfo> results = new CopyOnWriteArrayList<>();
 
         // when
@@ -66,18 +67,22 @@ class StockConcurrencyTest {
             long memberId = 2000L + i;
             executor.submit(() -> {
                 try {
+                    startLatch.await();
                     OrderInfo result = orderService.create(new OrderCreateCommand(
                             memberId,
                             List.of(new OrderLineRequest(product.getId(), 1)),
                             null
                     ));
                     results.add(result);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                 } finally {
-                    latch.countDown();
+                    endLatch.countDown();
                 }
             });
         }
-        latch.await();
+        startLatch.countDown();
+        endLatch.await();
         executor.shutdown();
 
         // then
@@ -94,7 +99,8 @@ class StockConcurrencyTest {
 
         int threadCount = 10;
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
-        CountDownLatch latch = new CountDownLatch(threadCount);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch endLatch = new CountDownLatch(threadCount);
         List<OrderInfo> results = new CopyOnWriteArrayList<>();
 
         // when
@@ -102,23 +108,68 @@ class StockConcurrencyTest {
             long memberId = 3000L + i;
             executor.submit(() -> {
                 try {
+                    startLatch.await();
                     OrderInfo result = orderService.create(new OrderCreateCommand(
                             memberId,
                             List.of(new OrderLineRequest(product.getId(), 1)),
                             null
                     ));
                     results.add(result);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                 } finally {
-                    latch.countDown();
+                    endLatch.countDown();
                 }
             });
         }
-        latch.await();
+        startLatch.countDown();
+        endLatch.await();
         executor.shutdown();
 
         // then
         long acceptedCount = results.stream().filter(OrderInfo::isAccepted).count();
         assertThat(acceptedCount).isEqualTo(5);
+    }
+
+    @Test
+    void 재고보다_많은_동시_주문이_들어오면_부족한_수만큼_거절된다() throws InterruptedException {
+        // given
+        Brand brand = brandRepository.save(Brand.register("거절브랜드"));
+        Product product = productRepository.save(
+                Product.register("거절상품", "설명", Money.of(10000), Stock.of(5), brand.getId()));
+
+        int threadCount = 10;
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch endLatch = new CountDownLatch(threadCount);
+        List<OrderInfo> results = new CopyOnWriteArrayList<>();
+
+        // when
+        for (int i = 0; i < threadCount; i++) {
+            long memberId = 3500L + i;
+            executor.submit(() -> {
+                try {
+                    startLatch.await();
+                    OrderInfo result = orderService.create(new OrderCreateCommand(
+                            memberId,
+                            List.of(new OrderLineRequest(product.getId(), 1)),
+                            null
+                    ));
+                    results.add(result);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    endLatch.countDown();
+                }
+            });
+        }
+        startLatch.countDown();
+        endLatch.await();
+        executor.shutdown();
+
+        // then
+        long rejectedCount = results.stream().filter(OrderInfo::isRejected).count();
+        assertThat(rejectedCount).isEqualTo(5);
     }
 
     @Test
@@ -130,24 +181,29 @@ class StockConcurrencyTest {
 
         int threadCount = 10;
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
-        CountDownLatch latch = new CountDownLatch(threadCount);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch endLatch = new CountDownLatch(threadCount);
 
         // when
         for (int i = 0; i < threadCount; i++) {
             long memberId = 4000L + i;
             executor.submit(() -> {
                 try {
+                    startLatch.await();
                     orderService.create(new OrderCreateCommand(
                             memberId,
                             List.of(new OrderLineRequest(product.getId(), 1)),
                             null
                     ));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                 } finally {
-                    latch.countDown();
+                    endLatch.countDown();
                 }
             });
         }
-        latch.await();
+        startLatch.countDown();
+        endLatch.await();
         executor.shutdown();
 
         // then
