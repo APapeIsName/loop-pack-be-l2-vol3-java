@@ -23,19 +23,15 @@ class CouponApplyServiceTest {
     @Mock
     private IssuedCouponRepository issuedCouponRepository;
 
-    @Mock
-    private CouponRepository couponRepository;
-
     @Test
     void 쿠폰_검증_성공_할인금액_반환() {
         // given
         IssuedCoupon issuedCoupon = IssuedCoupon.issue(1L, 10L);
         ReflectionTestUtils.setField(issuedCoupon, "id", 100L);
-        given(issuedCouponRepository.findById(100L)).willReturn(Optional.of(issuedCoupon));
-
         Coupon coupon = CouponFixture.create();
         ReflectionTestUtils.setField(coupon, "id", 1L);
-        given(couponRepository.findById(1L)).willReturn(Optional.of(coupon));
+        given(issuedCouponRepository.findByIdWithCoupon(100L))
+                .willReturn(Optional.of(new IssuedCouponWithCoupon(issuedCoupon, coupon)));
 
         // when
         CouponApplyResult result = couponApplyService.validate(100L, 10L, 200000);
@@ -47,7 +43,7 @@ class CouponApplyServiceTest {
     @Test
     void 존재하지_않는_발급쿠폰_예외() {
         // given
-        given(issuedCouponRepository.findById(999L)).willReturn(Optional.empty());
+        given(issuedCouponRepository.findByIdWithCoupon(999L)).willReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> couponApplyService.validate(999L, 10L, 200000))
@@ -60,7 +56,10 @@ class CouponApplyServiceTest {
         // given
         IssuedCoupon issuedCoupon = IssuedCoupon.issue(1L, 99L);
         ReflectionTestUtils.setField(issuedCoupon, "id", 100L);
-        given(issuedCouponRepository.findById(100L)).willReturn(Optional.of(issuedCoupon));
+        Coupon coupon = CouponFixture.create();
+        ReflectionTestUtils.setField(coupon, "id", 1L);
+        given(issuedCouponRepository.findByIdWithCoupon(100L))
+                .willReturn(Optional.of(new IssuedCouponWithCoupon(issuedCoupon, coupon)));
 
         // when & then
         assertThatThrownBy(() -> couponApplyService.validate(100L, 10L, 200000))
@@ -74,7 +73,10 @@ class CouponApplyServiceTest {
         IssuedCoupon issuedCoupon = IssuedCoupon.issue(1L, 10L);
         issuedCoupon.use();
         ReflectionTestUtils.setField(issuedCoupon, "id", 100L);
-        given(issuedCouponRepository.findById(100L)).willReturn(Optional.of(issuedCoupon));
+        Coupon coupon = CouponFixture.create();
+        ReflectionTestUtils.setField(coupon, "id", 1L);
+        given(issuedCouponRepository.findByIdWithCoupon(100L))
+                .willReturn(Optional.of(new IssuedCouponWithCoupon(issuedCoupon, coupon)));
 
         // when & then
         assertThatThrownBy(() -> couponApplyService.validate(100L, 10L, 200000))
@@ -87,11 +89,10 @@ class CouponApplyServiceTest {
         // given
         IssuedCoupon issuedCoupon = IssuedCoupon.issue(1L, 10L);
         ReflectionTestUtils.setField(issuedCoupon, "id", 100L);
-        given(issuedCouponRepository.findById(100L)).willReturn(Optional.of(issuedCoupon));
-
         Coupon expiredCoupon = CouponFixture.createExpired();
         ReflectionTestUtils.setField(expiredCoupon, "id", 1L);
-        given(couponRepository.findById(1L)).willReturn(Optional.of(expiredCoupon));
+        given(issuedCouponRepository.findByIdWithCoupon(100L))
+                .willReturn(Optional.of(new IssuedCouponWithCoupon(issuedCoupon, expiredCoupon)));
 
         // when & then
         assertThatThrownBy(() -> couponApplyService.validate(100L, 10L, 200000))
@@ -104,12 +105,11 @@ class CouponApplyServiceTest {
         // given
         IssuedCoupon issuedCoupon = IssuedCoupon.issue(1L, 10L);
         ReflectionTestUtils.setField(issuedCoupon, "id", 100L);
-        given(issuedCouponRepository.findById(100L)).willReturn(Optional.of(issuedCoupon));
-
         Coupon deletedCoupon = CouponFixture.create();
         deletedCoupon.delete();
         ReflectionTestUtils.setField(deletedCoupon, "id", 1L);
-        given(couponRepository.findById(1L)).willReturn(Optional.of(deletedCoupon));
+        given(issuedCouponRepository.findByIdWithCoupon(100L))
+                .willReturn(Optional.of(new IssuedCouponWithCoupon(issuedCoupon, deletedCoupon)));
 
         // when & then
         assertThatThrownBy(() -> couponApplyService.validate(100L, 10L, 200000))
@@ -122,11 +122,10 @@ class CouponApplyServiceTest {
         // given
         IssuedCoupon issuedCoupon = IssuedCoupon.issue(1L, 10L);
         ReflectionTestUtils.setField(issuedCoupon, "id", 100L);
-        given(issuedCouponRepository.findById(100L)).willReturn(Optional.of(issuedCoupon));
-
         Coupon coupon = CouponFixture.create();
         ReflectionTestUtils.setField(coupon, "id", 1L);
-        given(couponRepository.findById(1L)).willReturn(Optional.of(coupon));
+        given(issuedCouponRepository.findByIdWithCoupon(100L))
+                .willReturn(Optional.of(new IssuedCouponWithCoupon(issuedCoupon, coupon)));
 
         // when & then
         assertThatThrownBy(() -> couponApplyService.validate(100L, 10L, 5000))

@@ -1,6 +1,7 @@
 package com.loopers.domain.like;
 
-import com.loopers.domain.catalog.ActiveProductService;
+import com.loopers.domain.catalog.product.ProductExceptionMessage;
+import com.loopers.domain.catalog.product.ProductRepository;
 import com.loopers.support.error.CoreException;
 import com.loopers.support.error.ErrorType;
 import lombok.RequiredArgsConstructor;
@@ -11,10 +12,13 @@ import org.springframework.stereotype.Component;
 public class LikeMarkService {
 
     private final LikeRepository likeRepository;
-    private final ActiveProductService activeProductService;
+    private final ProductRepository productRepository;
 
     public Like mark(Long memberId, Long productId) {
-        activeProductService.get(productId);
+        productRepository.findById(productId)
+                .filter(p -> !p.isDeleted())
+                .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
+                        ProductExceptionMessage.Product.NOT_FOUND.message()));
 
         if (likeRepository.existsByMemberIdAndSubjectTypeAndSubjectId(
                 memberId, LikeSubjectType.PRODUCT, productId)) {

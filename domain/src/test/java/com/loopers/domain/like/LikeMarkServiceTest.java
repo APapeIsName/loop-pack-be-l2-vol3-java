@@ -1,7 +1,8 @@
 package com.loopers.domain.like;
 
-import com.loopers.domain.catalog.ActiveProductService;
 import com.loopers.domain.catalog.product.Product;
+import com.loopers.domain.catalog.product.ProductExceptionMessage;
+import com.loopers.domain.catalog.product.ProductRepository;
 import com.loopers.domain.catalog.product.vo.Money;
 import com.loopers.domain.catalog.product.vo.Stock;
 import com.loopers.support.error.CoreException;
@@ -28,13 +29,13 @@ class LikeMarkServiceTest {
     private LikeRepository likeRepository;
 
     @Mock
-    private ActiveProductService activeProductService;
+    private ProductRepository productRepository;
 
     @Test
     void 좋아요_등록_성공() {
         // given
         Product product = Product.register("에어맥스", "설명", Money.of(100000), Stock.of(50), 10L);
-        given(activeProductService.get(100L)).willReturn(product);
+        given(productRepository.findById(100L)).willReturn(Optional.of(product));
         given(likeRepository.existsByMemberIdAndSubjectTypeAndSubjectId(1L, LikeSubjectType.PRODUCT, 100L))
                 .willReturn(false);
 
@@ -49,7 +50,7 @@ class LikeMarkServiceTest {
     void 이미_좋아요한_상품이면_예외() {
         // given
         Product product = Product.register("에어맥스", "설명", Money.of(100000), Stock.of(50), 10L);
-        given(activeProductService.get(100L)).willReturn(product);
+        given(productRepository.findById(100L)).willReturn(Optional.of(product));
         given(likeRepository.existsByMemberIdAndSubjectTypeAndSubjectId(1L, LikeSubjectType.PRODUCT, 100L))
                 .willReturn(true);
 
@@ -57,6 +58,30 @@ class LikeMarkServiceTest {
         assertThatThrownBy(() -> likeMarkService.mark(1L, 100L))
                 .isInstanceOf(CoreException.class)
                 .hasMessage(LikeExceptionMessage.Like.ALREADY_LIKED.message());
+    }
+
+    @Test
+    void 존재하지_않는_상품에_좋아요_시_예외() {
+        // given
+        given(productRepository.findById(999L)).willReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> likeMarkService.mark(1L, 999L))
+                .isInstanceOf(CoreException.class)
+                .hasMessage(ProductExceptionMessage.Product.NOT_FOUND.message());
+    }
+
+    @Test
+    void 삭제된_상품에_좋아요_시_예외() {
+        // given
+        Product product = Product.register("에어맥스", "설명", Money.of(100000), Stock.of(50), 10L);
+        product.delete();
+        given(productRepository.findById(100L)).willReturn(Optional.of(product));
+
+        // when & then
+        assertThatThrownBy(() -> likeMarkService.mark(1L, 100L))
+                .isInstanceOf(CoreException.class)
+                .hasMessage(ProductExceptionMessage.Product.NOT_FOUND.message());
     }
 
     @Test

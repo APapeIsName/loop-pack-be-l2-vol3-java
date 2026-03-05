@@ -10,12 +10,14 @@ import org.springframework.stereotype.Component;
 public class CouponApplyService {
 
     private final IssuedCouponRepository issuedCouponRepository;
-    private final CouponRepository couponRepository;
 
     public CouponApplyResult validate(Long issuedCouponId, Long memberId, long orderAmount) {
-        IssuedCoupon issuedCoupon = issuedCouponRepository.findById(issuedCouponId)
+        IssuedCouponWithCoupon result = issuedCouponRepository.findByIdWithCoupon(issuedCouponId)
                 .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
                         CouponExceptionMessage.IssuedCoupon.NOT_FOUND.message()));
+
+        IssuedCoupon issuedCoupon = result.issuedCoupon();
+        Coupon coupon = result.coupon();
 
         if (!issuedCoupon.isOwnedBy(memberId)) {
             throw new CoreException(ErrorType.FORBIDDEN,
@@ -26,10 +28,6 @@ public class CouponApplyService {
             throw new CoreException(ErrorType.BAD_REQUEST,
                     CouponExceptionMessage.IssuedCoupon.NOT_AVAILABLE.message());
         }
-
-        Coupon coupon = couponRepository.findById(issuedCoupon.getCouponId())
-                .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
-                        CouponExceptionMessage.Coupon.NOT_FOUND.message()));
 
         if (coupon.isExpired()) {
             throw new CoreException(ErrorType.BAD_REQUEST,

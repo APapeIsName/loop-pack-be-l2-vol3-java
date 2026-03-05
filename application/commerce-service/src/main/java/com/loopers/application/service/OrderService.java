@@ -83,21 +83,19 @@ public class OrderService {
                     OrderExceptionMessage.Order.NOT_OWNER.message());
         }
 
-        return toOrderInfo(order);
+        return toOrderInfos(List.of(order)).get(0);
     }
 
     @Transactional(readOnly = true)
     public List<OrderInfo> getByMemberId(Long memberId) {
-        return orderRepository.findByMemberId(memberId).stream()
-                .map(this::toOrderInfo)
-                .toList();
+        List<Order> orders = orderRepository.findByMemberId(memberId);
+        return toOrderInfos(orders);
     }
 
     @Transactional(readOnly = true)
     public List<OrderInfo> getAll() {
-        return orderRepository.findAll().stream()
-                .map(this::toOrderInfo)
-                .toList();
+        List<Order> orders = orderRepository.findAll();
+        return toOrderInfos(orders);
     }
 
     @Transactional(readOnly = true)
@@ -106,7 +104,7 @@ public class OrderService {
                 .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
                         OrderExceptionMessage.Order.NOT_FOUND.message()));
 
-        return toOrderInfo(order);
+        return toOrderInfos(List.of(order)).get(0);
     }
 
     private List<Long> extractSortedProductIds(List<OrderLineRequest> requests) {
@@ -165,17 +163,35 @@ public class OrderService {
         return snapshots;
     }
 
-    private OrderInfo toOrderInfo(Order order) {
-        List<OrderLine> lines = orderLineRepository.findByOrderId(order.getId());
-        List<Long> lineIds = lines.stream().map(OrderLine::getId).toList();
-        List<OrderLineSnapshot> snapshots = orderLineSnapshotRepository.findByOrderLineIdIn(lineIds);
-        return toOrderInfo(order, lines, snapshots);
+    private List<OrderInfo> toOrderInfos(List<Order> orders) {
+        if (orders.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> orderIds = orders.stream().map(Order::getId).toList();
+        List<OrderLine> allLines = orderLineRepository.findByOrderIdIn(orderIds);
+        List<Long> allLineIds = allLines.stream().map(OrderLine::getId).toList();
+        List<OrderLineSnapshot> allSnapshots = orderLineSnapshotRepository.findByOrderLineIdIn(allLineIds);
+
+        Map<Long, List<OrderLine>> linesByOrderId = allLines.stream()
+                .collect(Collectors.groupingBy(OrderLine::getOrderId));
+        Map<Long, OrderLineSnapshot> snapshotByLineId = allSnapshots.stream()
+                .collect(Collectors.toMap(OrderLineSnapshot::getOrderLineId, Function.identity()));
+
+        return orders.stream()
+                .map(order -> toOrderInfo(order,
+                        linesByOrderId.getOrDefault(order.getId(), List.of()),
+                        snapshotByLineId))
+                .toList();
     }
 
     private OrderInfo toOrderInfo(Order order, List<OrderLine> lines, List<OrderLineSnapshot> snapshots) {
         Map<Long, OrderLineSnapshot> snapshotMap = snapshots.stream()
                 .collect(Collectors.toMap(OrderLineSnapshot::getOrderLineId, Function.identity()));
+        return toOrderInfo(order, lines, snapshotMap);
+    }
 
+    private OrderInfo toOrderInfo(Order order, List<OrderLine> lines, Map<Long, OrderLineSnapshot> snapshotMap) {
         List<OrderLineInfo> lineInfos = lines.stream()
                 .map(line -> {
                     OrderLineSnapshot snapshot = snapshotMap.get(line.getId());

@@ -27,4 +27,9 @@ public class OrderLineRepositoryImpl implements OrderLineRepository {
     public List<OrderLine> findByOrderId(Long orderId) {
         return orderLineJpaRepository.findByOrderId(orderId);
     }
+
+    @Override
+    public List<OrderLine> findByOrderIdIn(List<Long> orderIds) {
+        return orderLineJpaRepository.findByOrderIdIn(orderIds);
+    }
 }

@@ -9,6 +9,8 @@ public interface IssuedCouponRepository {
 
     Optional<IssuedCoupon> findById(Long id);
 
+    Optional<IssuedCouponWithCoupon> findByIdWithCoupon(Long id);
+
     List<IssuedCoupon> findByMemberId(Long memberId);
 
     List<IssuedCoupon> findAllByCouponId(Long couponId);

@@ -270,7 +270,7 @@ class OrderServiceTest {
                 OrderLine.of(1L, Quantity.of(2), "에어맥스", "설명", 100000, "나이키")
         ), OrderStatus.ACCEPTED, null, 200000, 0, 200000);
         given(orderRepository.findByMemberId(memberId)).willReturn(List.of(order));
-        given(orderLineRepository.findByOrderId(any())).willReturn(List.of());
+        given(orderLineRepository.findByOrderIdIn(any())).willReturn(List.of());
         given(orderLineSnapshotRepository.findByOrderLineIdIn(any())).willReturn(List.of());
 
         // when
@@ -291,7 +291,7 @@ class OrderServiceTest {
                 OrderLine.of(1L, Quantity.of(2), "에어맥스", "설명", 100000, "나이키")
         ), OrderStatus.ACCEPTED, null, 200000, 0, 200000);
         given(orderRepository.findById(orderId)).willReturn(Optional.of(order));
-        given(orderLineRepository.findByOrderId(any())).willReturn(List.of());
+        given(orderLineRepository.findByOrderIdIn(any())).willReturn(List.of());
         given(orderLineSnapshotRepository.findByOrderLineIdIn(any())).willReturn(List.of());
 
         // when
@@ -336,7 +336,7 @@ class OrderServiceTest {
                 OrderLine.of(1L, Quantity.of(2), "에어맥스", "설명", 100000, "나이키")
         ), OrderStatus.ACCEPTED, null, 200000, 0, 200000);
         given(orderRepository.findAll()).willReturn(List.of(order));
-        given(orderLineRepository.findByOrderId(any())).willReturn(List.of());
+        given(orderLineRepository.findByOrderIdIn(any())).willReturn(List.of());
         given(orderLineSnapshotRepository.findByOrderLineIdIn(any())).willReturn(List.of());
 
         // when

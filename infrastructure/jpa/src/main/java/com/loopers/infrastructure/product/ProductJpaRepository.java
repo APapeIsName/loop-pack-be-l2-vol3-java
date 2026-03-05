@@ -20,7 +20,7 @@ public interface ProductJpaRepository extends JpaRepository<Product, Long> {
     @Query("SELECT p FROM Product p WHERE p.id = :id")
     Optional<Product> findByIdWithPessimisticLock(@Param("id") Long id);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("UPDATE Product p SET p.likesCount = GREATEST(0, p.likesCount + :delta) WHERE p.id = :productId")
     void updateLikesCount(@Param("productId") Long productId, @Param("delta") int delta);
 }
