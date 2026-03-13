@@ -13,6 +13,8 @@ public interface ProductRepository {
 
     List<Product> findAllActive(ProductSortType sortType);
 
+    List<Product> findAllActive(ProductSortType sortType, Long brandId, int page, int size);
+
     List<Product> findAll();
 
     List<Product> findAllByIdIn(List<Long> ids);

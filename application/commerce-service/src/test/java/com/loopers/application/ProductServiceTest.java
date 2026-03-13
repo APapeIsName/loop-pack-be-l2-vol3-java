@@ -158,7 +158,9 @@ class ProductServiceTest {
         Long productId = 1L;
         Product product = Product.register("에어맥스", "설명", Money.of(100000), Stock.of(50), 1L);
         ProductUpdateCommand command = new ProductUpdateCommand("에어맥스2", "새설명", 120000, 60);
+        Brand brand = Brand.register("나이키");
         given(productRepository.findById(productId)).willReturn(Optional.of(product));
+        given(brandRepository.findById(1L)).willReturn(Optional.of(brand));
 
         // when
         productService.update(productId, command);

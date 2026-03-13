@@ -21,9 +21,12 @@ public class ProductController {
     /** 활성 상품 목록 조회 */
     @GetMapping
     public List<ProductApiResponse> getActiveProducts(
-            @RequestParam(defaultValue = "LATEST") ProductSortType sort
+            @RequestParam(defaultValue = "LATEST") ProductSortType sort,
+            @RequestParam(required = false) Long brandId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size
     ) {
-        return productService.getActiveProducts(sort).stream()
+        return productService.getActiveProducts(sort, brandId, page, size).stream()
                 .map(ProductApiResponse::from)
                 .toList();
     }

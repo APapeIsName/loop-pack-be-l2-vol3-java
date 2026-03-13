@@ -14,6 +14,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.jdbc.datasource.init.ScriptUtils;
+
+import javax.sql.DataSource;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.sql.Connection;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -22,6 +32,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class LikeConcurrencyTest {
 
     @Autowired
@@ -35,6 +46,17 @@ class LikeConcurrencyTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private DataSource dataSource;
+
+    @BeforeAll
+    void 제약조건_적용() throws Exception {
+        Resource resource = resolveSqlResource("docs/sql/constraint.sql");
+        try (Connection connection = dataSource.getConnection()) {
+            ScriptUtils.executeSqlScript(connection, resource);
+        }
+    }
 
     @AfterEach
     void tearDown() {
@@ -76,6 +98,10 @@ class LikeConcurrencyTest {
         // then
         Product updated = productRepository.findById(product.getId()).orElseThrow();
         assertThat(updated.hasLikesCount(10L)).isTrue();
+
+        Long actualLikeCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM likes WHERE subject_id = ?", Long.class, product.getId());
+        assertThat(actualLikeCount).isEqualTo(10L);
     }
 
     @Test
@@ -146,5 +172,15 @@ class LikeConcurrencyTest {
 
         // then
         assertThat(successCount.get()).isEqualTo(1);
+    }
+
+    private Resource resolveSqlResource(String relativePath) {
+        Path fromModule = Path.of("../../" + relativePath);
+        if (Files.exists(fromModule)) return new FileSystemResource(fromModule);
+
+        Path fromRoot = Path.of(relativePath);
+        if (Files.exists(fromRoot)) return new FileSystemResource(fromRoot);
+
+        throw new IllegalStateException("SQL 파일을 찾을 수 없습니다: " + relativePath);
     }
 }

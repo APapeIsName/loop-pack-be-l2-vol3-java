@@ -11,9 +11,7 @@ import lombok.NoArgsConstructor;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(name = "brand", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_brand_name", columnNames = "name")
-})
+@Table(name = "brand")
 public class Brand extends SoftDeletableEntity {
 
     @Embedded

@@ -68,12 +68,19 @@ subprojects {
         testImplementation("org.testcontainers:junit-jupiter")
     }
 
+    tasks.withType<JavaCompile> {
+        options.compilerArgs.add("-parameters")
+    }
+
     tasks.test {
         maxParallelForks = 1
         useJUnitPlatform()
         systemProperty("user.timezone", "Asia/Seoul")
         systemProperty("spring.profiles.active", "test")
         jvmArgs("-Xshare:off")
+        testLogging {
+            showStandardStreams = true
+        }
     }
 
     tasks.withType<JacocoReport> {

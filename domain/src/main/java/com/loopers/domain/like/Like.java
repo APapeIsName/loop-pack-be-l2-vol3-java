@@ -9,10 +9,7 @@ import lombok.NoArgsConstructor;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(name = "likes", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_likes_member_subject",
-                columnNames = {"member_id", "subject_type", "subject_id"})
-})
+@Table(name = "likes")
 public class Like extends BaseTimeEntity {
 
     @Column(name = "member_id", nullable = false)

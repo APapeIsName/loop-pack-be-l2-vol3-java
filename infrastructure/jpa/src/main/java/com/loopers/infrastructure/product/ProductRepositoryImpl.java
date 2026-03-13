@@ -47,6 +47,24 @@ public class ProductRepositoryImpl implements ProductRepository {
     }
 
     @Override
+    public List<Product> findAllActive(ProductSortType sortType, Long brandId, int page, int size) {
+        return queryFactory
+                .selectFrom(product)
+                .where(
+                        product.deletedAt.isNull(),
+                        brandIdEq(brandId)
+                )
+                .orderBy(toOrderSpecifier(sortType))
+                .offset((long) (page - 1) * size)
+                .limit(size)
+                .fetch();
+    }
+
+    private com.querydsl.core.types.dsl.BooleanExpression brandIdEq(Long brandId) {
+        return brandId != null ? product.brandId.eq(brandId) : null;
+    }
+
+    @Override
     public List<Product> findAll() {
         return productJpaRepository.findAll();
     }

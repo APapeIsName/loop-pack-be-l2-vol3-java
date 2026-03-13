@@ -15,6 +15,10 @@ import com.loopers.domain.catalog.product.vo.Stock;
 import com.loopers.support.error.CoreException;
 import com.loopers.support.error.ErrorType;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +34,7 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final BrandRepository brandRepository;
 
+    @CacheEvict(cacheNames = "products", allEntries = true)
     @Transactional
     public void create(ProductCreateCommand command) {
         Brand brand = brandRepository.findById(command.brandId())
@@ -51,6 +56,7 @@ public class ProductService {
         productRepository.save(product);
     }
 
+    @Cacheable(cacheNames = "product", key = "#id")
     @Transactional(readOnly = true)
     public ProductInfo getById(Long id) {
         Product product = productRepository.findById(id)
@@ -76,8 +82,21 @@ public class ProductService {
         return toProductInfos(products);
     }
 
+    @Cacheable(cacheNames = "products",
+            key = "#sortType + ':' + (#brandId ?: 'all') + ':page=' + #page + ':size=' + #size",
+            condition = "#page <= 3")
+    @Transactional(readOnly = true)
+    public List<ProductInfo> getActiveProducts(ProductSortType sortType, Long brandId, int page, int size) {
+        List<Product> products = productRepository.findAllActive(sortType, brandId, page, size);
+        return toProductInfos(products);
+    }
+
+    @Caching(
+            put = @CachePut(cacheNames = "product", key = "#id"),
+            evict = @CacheEvict(cacheNames = "products", allEntries = true)
+    )
     @Transactional
-    public void update(Long id, ProductUpdateCommand command) {
+    public ProductInfo update(Long id, ProductUpdateCommand command) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
                         ProductExceptionMessage.Product.NOT_FOUND.message()));
@@ -88,8 +107,18 @@ public class ProductService {
                 Money.of(command.price()),
                 Stock.of(command.stock())
         );
+
+        Brand brand = brandRepository.findById(product.getBrandId())
+                .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
+                        BrandExceptionMessage.Brand.NOT_FOUND.message()));
+
+        return ProductInfo.from(product, brand);
     }
 
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "product", key = "#id"),
+            @CacheEvict(cacheNames = "products", allEntries = true)
+    })
     @Transactional
     public void delete(Long id) {
         Product product = productRepository.findById(id)
