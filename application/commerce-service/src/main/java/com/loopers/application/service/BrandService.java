@@ -10,6 +10,8 @@ import com.loopers.domain.catalog.brand.BrandRepository;
 import com.loopers.support.error.CoreException;
 import com.loopers.support.error.ErrorType;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +24,7 @@ public class BrandService {
     private final BrandRepository brandRepository;
     private final BrandDeleteService brandDeleteService;
 
+    @CacheEvict(cacheNames = "brands", allEntries = true, cacheManager = "caffeineCacheManager")
     @Transactional
     public void create(BrandCreateCommand command) {
         if (brandRepository.existsByName(command.name())) {
@@ -48,6 +51,7 @@ public class BrandService {
                 .toList();
     }
 
+    @Cacheable(cacheNames = "brands", cacheManager = "caffeineCacheManager")
     @Transactional(readOnly = true)
     public List<BrandInfo> getActiveBrands() {
         return brandRepository.findAllByDeletedAtIsNull().stream()
@@ -55,6 +59,7 @@ public class BrandService {
                 .toList();
     }
 
+    @CacheEvict(cacheNames = "brands", allEntries = true, cacheManager = "caffeineCacheManager")
     @Transactional
     public void update(Long id, BrandUpdateCommand command) {
         Brand brand = brandRepository.findById(id)
@@ -69,6 +74,7 @@ public class BrandService {
         brand.updateName(command.name());
     }
 
+    @CacheEvict(cacheNames = "brands", allEntries = true, cacheManager = "caffeineCacheManager")
     @Transactional
     public void delete(Long id) {
         brandDeleteService.delete(id);

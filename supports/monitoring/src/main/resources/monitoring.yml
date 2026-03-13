@@ -12,6 +12,8 @@ management:
         include:
           - health
           - prometheus
+          - metrics
+          - caches
   endpoint:
     health:
       probes:

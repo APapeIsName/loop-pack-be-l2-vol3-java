@@ -5,6 +5,8 @@ import com.loopers.domain.coupon.*;
 import com.loopers.support.error.CoreException;
 import com.loopers.support.error.ErrorType;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +27,7 @@ public class CouponService {
         couponRepository.save(coupon);
     }
 
+    @Cacheable(cacheNames = "coupon", key = "#id", cacheManager = "caffeineCacheManager")
     @Transactional(readOnly = true)
     public CouponInfo getById(Long id) {
         Coupon coupon = couponRepository.findById(id)
@@ -40,6 +43,7 @@ public class CouponService {
                 .toList();
     }
 
+    @CacheEvict(cacheNames = "coupon", key = "#id", cacheManager = "caffeineCacheManager")
     @Transactional
     public void update(Long id, CouponUpdateCommand command) {
         Coupon coupon = couponRepository.findById(id)
@@ -50,6 +54,7 @@ public class CouponService {
                 command.minOrderAmount(), command.expiredAt());
     }
 
+    @CacheEvict(cacheNames = "coupon", key = "#id", cacheManager = "caffeineCacheManager")
     @Transactional
     public void delete(Long id) {
         Coupon coupon = couponRepository.findById(id)
