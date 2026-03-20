@@ -1,5 +1,6 @@
 package com.loopers.application;
 
+import com.loopers.application.service.OrderService;
 import com.loopers.application.service.PaymentService;
 import com.loopers.application.service.dto.PaymentCallbackCommand;
 import com.loopers.application.service.dto.PaymentInfo;
@@ -51,13 +52,16 @@ class PaymentServiceTest {
     @Mock
     private TransactionTemplate transactionTemplate;
 
+    @Mock
+    private OrderService orderService;
+
     @Test
     void 결제_요청_성공_PG_접수() {
         // given
         givenTransactionTemplate();
         Order order = createAcceptedOrder(1L, 10L, 50000);
         given(orderRepository.findByIdWithPessimisticLock(1L)).willReturn(Optional.of(order));
-        given(paymentRepository.findByOrderIdAndStatus(1L, PaymentStatus.PENDING)).willReturn(Optional.empty());
+        given(paymentRepository.findByOrderIdAndStatusIn(1L, List.of(PaymentStatus.REQUESTED, PaymentStatus.PENDING))).willReturn(Optional.empty());
         given(paymentRepository.save(any(Payment.class))).willAnswer(invocation -> {
             Payment p = invocation.getArgument(0);
             ReflectionTestUtils.setField(p, "id", 100L);
@@ -83,7 +87,7 @@ class PaymentServiceTest {
         givenTransactionTemplate();
         Order order = createAcceptedOrder(1L, 10L, 50000);
         given(orderRepository.findByIdWithPessimisticLock(1L)).willReturn(Optional.of(order));
-        given(paymentRepository.findByOrderIdAndStatus(1L, PaymentStatus.PENDING)).willReturn(Optional.empty());
+        given(paymentRepository.findByOrderIdAndStatusIn(1L, List.of(PaymentStatus.REQUESTED, PaymentStatus.PENDING))).willReturn(Optional.empty());
         given(paymentRepository.save(any(Payment.class))).willAnswer(invocation -> {
             Payment p = invocation.getArgument(0);
             ReflectionTestUtils.setField(p, "id", 100L);
@@ -141,7 +145,7 @@ class PaymentServiceTest {
         // when & then
         assertThatThrownBy(() -> paymentService.requestPayment(command))
                 .isInstanceOf(CoreException.class)
-                .hasMessage(PaymentExceptionMessage.Payment.ORDER_NOT_ACCEPTED.message());
+                .hasMessage(OrderExceptionMessage.Order.NOT_ACCEPTED.message());
     }
 
     @Test
@@ -150,7 +154,7 @@ class PaymentServiceTest {
         givenTransactionTemplate();
         Order order = createAcceptedOrder(1L, 10L, 50000);
         given(orderRepository.findByIdWithPessimisticLock(1L)).willReturn(Optional.of(order));
-        given(paymentRepository.findByOrderIdAndStatus(1L, PaymentStatus.PENDING))
+        given(paymentRepository.findByOrderIdAndStatusIn(1L, List.of(PaymentStatus.REQUESTED, PaymentStatus.PENDING)))
                 .willReturn(Optional.of(PaymentFixture.create()));
         PaymentRequestCommand command = new PaymentRequestCommand(10L, 1L, CardType.SAMSUNG, "1234-5678-9012-3456");
 
@@ -164,7 +168,7 @@ class PaymentServiceTest {
     void 콜백_성공_시_결제_승인_및_주문_결제_완료() {
         // given
         Payment payment = PaymentFixture.create(1L, 10L, 50000);
-        payment.assignTransactionKey("TR:abc123");
+        payment.pend("TR:abc123");
         given(paymentRepository.findByTransactionKeyWithPessimisticLock("TR:abc123"))
                 .willReturn(Optional.of(payment));
         Order order = createAcceptedOrder(1L, 10L, 50000);
@@ -183,7 +187,7 @@ class PaymentServiceTest {
     void 콜백_성공_시_주문_상태_PAID() {
         // given
         Payment payment = PaymentFixture.create(1L, 10L, 50000);
-        payment.assignTransactionKey("TR:abc123");
+        payment.pend("TR:abc123");
         given(paymentRepository.findByTransactionKeyWithPessimisticLock("TR:abc123"))
                 .willReturn(Optional.of(payment));
         Order order = createAcceptedOrder(1L, 10L, 50000);
@@ -202,7 +206,7 @@ class PaymentServiceTest {
     void 콜백_실패_시_결제_실패_처리() {
         // given
         Payment payment = PaymentFixture.create(1L, 10L, 50000);
-        payment.assignTransactionKey("TR:abc123");
+        payment.pend("TR:abc123");
         given(paymentRepository.findByTransactionKeyWithPessimisticLock("TR:abc123"))
                 .willReturn(Optional.of(payment));
 
@@ -219,7 +223,7 @@ class PaymentServiceTest {
     void 이미_처리된_결제_콜백_무시() {
         // given
         Payment payment = PaymentFixture.create(1L, 10L, 50000);
-        payment.assignTransactionKey("TR:abc123");
+        payment.pend("TR:abc123");
         payment.approve();
         given(paymentRepository.findByTransactionKeyWithPessimisticLock("TR:abc123"))
                 .willReturn(Optional.of(payment));
@@ -237,15 +241,15 @@ class PaymentServiceTest {
     void reconcile_PG_성공_시_결제_승인() {
         // given
         givenTransactionTemplateWithExecuteWithoutResult();
-        Payment snapshot = PaymentFixture.create(1L, 10L, 50000);
-        ReflectionTestUtils.setField(snapshot, "id", 100L);
-        snapshot.assignTransactionKey("TR:abc123");
-        given(paymentRepository.findById(100L)).willReturn(Optional.of(snapshot));
+        Payment payment = PaymentFixture.create(1L, 10L, 50000);
+        ReflectionTestUtils.setField(payment, "id", 100L);
+        payment.pend("TR:abc123");
+        given(paymentRepository.findById(100L)).willReturn(Optional.of(payment));
 
-        Payment locked = PaymentFixture.create(1L, 10L, 50000);
-        locked.assignTransactionKey("TR:abc123");
+        Payment target = PaymentFixture.create(1L, 10L, 50000);
+        target.pend("TR:abc123");
         given(paymentRepository.findByTransactionKeyWithPessimisticLock("TR:abc123"))
-                .willReturn(Optional.of(locked));
+                .willReturn(Optional.of(target));
 
         Order order = createAcceptedOrder(1L, 10L, 50000);
         given(orderRepository.findById(1L)).willReturn(Optional.of(order));
@@ -257,22 +261,22 @@ class PaymentServiceTest {
         paymentService.reconcile(100L);
 
         // then
-        assertThat(locked.getStatus()).isEqualTo(PaymentStatus.APPROVED);
+        assertThat(target.getStatus()).isEqualTo(PaymentStatus.APPROVED);
     }
 
     @Test
     void reconcile_PG_실패_시_결제_실패() {
         // given
         givenTransactionTemplateWithExecuteWithoutResult();
-        Payment snapshot = PaymentFixture.create(1L, 10L, 50000);
-        ReflectionTestUtils.setField(snapshot, "id", 100L);
-        snapshot.assignTransactionKey("TR:abc123");
-        given(paymentRepository.findById(100L)).willReturn(Optional.of(snapshot));
+        Payment payment = PaymentFixture.create(1L, 10L, 50000);
+        ReflectionTestUtils.setField(payment, "id", 100L);
+        payment.pend("TR:abc123");
+        given(paymentRepository.findById(100L)).willReturn(Optional.of(payment));
 
-        Payment locked = PaymentFixture.create(1L, 10L, 50000);
-        locked.assignTransactionKey("TR:abc123");
+        Payment target = PaymentFixture.create(1L, 10L, 50000);
+        target.pend("TR:abc123");
         given(paymentRepository.findByTransactionKeyWithPessimisticLock("TR:abc123"))
-                .willReturn(Optional.of(locked));
+                .willReturn(Optional.of(target));
 
         given(paymentGateway.getPaymentStatus("10", "TR:abc123"))
                 .willReturn(new PaymentGatewayStatusResponse("TR:abc123", "1", "FAILED", "잘못된 카드"));
@@ -281,7 +285,7 @@ class PaymentServiceTest {
         paymentService.reconcile(100L);
 
         // then
-        assertThat(locked.getStatus()).isEqualTo(PaymentStatus.FAILED);
+        assertThat(target.getStatus()).isEqualTo(PaymentStatus.FAILED);
     }
 
     @Test
@@ -297,6 +301,73 @@ class PaymentServiceTest {
 
         // then
         verify(paymentGateway, never()).getPaymentStatus(any(), any());
+    }
+
+    @Test
+    void reconcile_PG_실패_시_주문_취소_호출() {
+        // given
+        givenTransactionTemplateWithExecuteWithoutResult();
+        Payment payment = PaymentFixture.create(1L, 10L, 50000);
+        ReflectionTestUtils.setField(payment, "id", 100L);
+        payment.pend("TR:abc123");
+        given(paymentRepository.findById(100L)).willReturn(Optional.of(payment));
+
+        Payment target = PaymentFixture.create(1L, 10L, 50000);
+        target.pend("TR:abc123");
+        given(paymentRepository.findByTransactionKeyWithPessimisticLock("TR:abc123"))
+                .willReturn(Optional.of(target));
+
+        given(paymentGateway.getPaymentStatus("10", "TR:abc123"))
+                .willReturn(new PaymentGatewayStatusResponse("TR:abc123", "1", "FAILED", "잘못된 카드"));
+
+        // when
+        paymentService.reconcile(100L);
+
+        // then
+        verify(orderService).cancel(1L);
+    }
+
+    @Test
+    void PG_즉시_거절_시_주문_취소_안함() {
+        // given
+        givenTransactionTemplate();
+        Order order = createAcceptedOrder(1L, 10L, 50000);
+        given(orderRepository.findByIdWithPessimisticLock(1L)).willReturn(Optional.of(order));
+        given(paymentRepository.findByOrderIdAndStatusIn(1L, List.of(PaymentStatus.REQUESTED, PaymentStatus.PENDING))).willReturn(Optional.empty());
+        given(paymentRepository.save(any(Payment.class))).willAnswer(invocation -> {
+            Payment p = invocation.getArgument(0);
+            ReflectionTestUtils.setField(p, "id", 100L);
+            return p;
+        });
+        given(paymentRepository.findById(100L)).willAnswer(invocation ->
+                Optional.of(PaymentFixture.create(1L, 10L, 50000)));
+        given(paymentGateway.requestPayment(any(), any()))
+                .willReturn(PaymentGatewayResponse.fail("한도 초과"));
+
+        PaymentRequestCommand command = new PaymentRequestCommand(10L, 1L, CardType.SAMSUNG, "1234-5678-9012-3456");
+
+        // when
+        paymentService.requestPayment(command);
+
+        // then
+        verify(orderService, never()).cancel(any());
+    }
+
+    @Test
+    void 콜백_실패_시_주문_취소_안함() {
+        // given
+        Payment payment = PaymentFixture.create(1L, 10L, 50000);
+        payment.pend("TR:abc123");
+        given(paymentRepository.findByTransactionKeyWithPessimisticLock("TR:abc123"))
+                .willReturn(Optional.of(payment));
+
+        PaymentCallbackCommand command = new PaymentCallbackCommand("TR:abc123", "FAILED", "한도 초과");
+
+        // when
+        paymentService.handleCallback(command);
+
+        // then
+        verify(orderService, never()).cancel(any());
     }
 
     private Order createAcceptedOrder(Long id, Long memberId, long finalAmount) {

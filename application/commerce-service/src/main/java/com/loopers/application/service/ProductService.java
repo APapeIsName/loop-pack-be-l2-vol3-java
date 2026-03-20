@@ -10,7 +10,7 @@ import com.loopers.domain.catalog.product.Product;
 import com.loopers.domain.catalog.product.ProductExceptionMessage;
 import com.loopers.domain.catalog.product.ProductRepository;
 import com.loopers.domain.catalog.product.ProductSortType;
-import com.loopers.domain.catalog.product.vo.Money;
+import com.loopers.domain.common.vo.Money;
 import com.loopers.domain.catalog.product.vo.Stock;
 import com.loopers.support.error.CoreException;
 import com.loopers.support.error.ErrorType;

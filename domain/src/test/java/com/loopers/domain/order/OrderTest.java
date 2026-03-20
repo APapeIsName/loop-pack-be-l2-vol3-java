@@ -178,6 +178,65 @@ class OrderTest {
     }
 
     @Test
+    void 수락된_주문_취소() {
+        // given
+        List<OrderLine> lines = List.of(
+                OrderLine.of(1L, Quantity.of(2L), "에어맥스", "설명", 100000L, "나이키")
+        );
+        Order order = Order.place(10L, lines, OrderStatus.ACCEPTED, null, 200000, 0, 200000);
+
+        // when
+        order.cancel();
+
+        // then
+        assertThat(order.isCancelled()).isTrue();
+    }
+
+    @Test
+    void 거절된_주문_취소_시_예외() {
+        // given
+        List<OrderLine> lines = List.of(
+                OrderLine.of(1L, Quantity.of(2L), "에어맥스", "설명", 100000L, "나이키")
+        );
+        Order order = Order.place(10L, lines, OrderStatus.REJECTED, null, 200000, 0, 200000);
+
+        // when & then
+        assertThatThrownBy(order::cancel)
+                .isInstanceOf(CoreException.class)
+                .hasMessage(OrderExceptionMessage.Order.NOT_CANCELLABLE.message());
+    }
+
+    @Test
+    void 결제된_주문_취소_시_예외() {
+        // given
+        List<OrderLine> lines = List.of(
+                OrderLine.of(1L, Quantity.of(2L), "에어맥스", "설명", 100000L, "나이키")
+        );
+        Order order = Order.place(10L, lines, OrderStatus.ACCEPTED, null, 200000, 0, 200000);
+        order.pay();
+
+        // when & then
+        assertThatThrownBy(order::cancel)
+                .isInstanceOf(CoreException.class)
+                .hasMessage(OrderExceptionMessage.Order.NOT_CANCELLABLE.message());
+    }
+
+    @Test
+    void 이미_취소된_주문_재취소_시_예외() {
+        // given
+        List<OrderLine> lines = List.of(
+                OrderLine.of(1L, Quantity.of(2L), "에어맥스", "설명", 100000L, "나이키")
+        );
+        Order order = Order.place(10L, lines, OrderStatus.ACCEPTED, null, 200000, 0, 200000);
+        order.cancel();
+
+        // when & then
+        assertThatThrownBy(order::cancel)
+                .isInstanceOf(CoreException.class)
+                .hasMessage(OrderExceptionMessage.Order.NOT_CANCELLABLE.message());
+    }
+
+    @Test
     void 빈_주문_예외() {
         // when & then
         assertThatThrownBy(() -> Order.place(10L, List.of(), OrderStatus.ACCEPTED, null, 0, 0, 0))

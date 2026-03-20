@@ -7,4 +7,8 @@ public record PaymentGatewayRequest(
         long amount,
         String callbackUrl
 ) {
+
+    public PaymentGatewayRequest withCallbackUrl(String callbackUrl) {
+        return new PaymentGatewayRequest(orderId, cardType, cardNo, amount, callbackUrl);
+    }
 }

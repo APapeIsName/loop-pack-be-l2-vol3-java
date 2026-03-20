@@ -35,6 +35,10 @@ public class Stock {
         return this.value == value;
     }
 
+    public Stock increase(Quantity quantity) {
+        return new Stock(this.value + quantity.getValue());
+    }
+
     public Stock decrease(Quantity quantity) {
         if (!isEnough(quantity)) {
             throw new CoreException(ErrorType.BAD_REQUEST,

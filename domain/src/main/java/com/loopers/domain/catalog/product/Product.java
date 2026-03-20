@@ -1,7 +1,7 @@
 package com.loopers.domain.catalog.product;
 
 import com.loopers.domain.SoftDeletableEntity;
-import com.loopers.domain.catalog.product.vo.Money;
+import com.loopers.domain.common.vo.Money;
 import com.loopers.domain.catalog.product.vo.Quantity;
 import com.loopers.domain.catalog.product.vo.Stock;
 import com.loopers.domain.common.vo.Name;
@@ -26,6 +26,7 @@ public class Product extends SoftDeletableEntity {
     private String description;
 
     @Embedded
+    @AttributeOverride(name = "value", column = @Column(name = "price", nullable = false))
     private Money price;
 
     @Embedded
@@ -72,6 +73,11 @@ public class Product extends SoftDeletableEntity {
         this.description = description;
         this.price = price;
         this.stock = stock;
+    }
+
+    public void increaseStock(Quantity quantity) {
+        guardNotDeleted();
+        this.stock = this.stock.increase(quantity);
     }
 
     public void decreaseStock(Quantity quantity) {

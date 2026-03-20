@@ -60,8 +60,20 @@ public class Order extends BaseTimeEntity {
         this.status = OrderStatus.PAID;
     }
 
+    public void cancel() {
+        if (!isAccepted()) {
+            throw new CoreException(ErrorType.CONFLICT,
+                    OrderExceptionMessage.Order.NOT_CANCELLABLE.message());
+        }
+        this.status = OrderStatus.CANCELLED;
+    }
+
     public boolean isAccepted() {
         return this.status == OrderStatus.ACCEPTED;
+    }
+
+    public boolean isCancelled() {
+        return this.status == OrderStatus.CANCELLED;
     }
 
     public boolean isOwnedBy(Long memberId) {

@@ -6,4 +6,16 @@ public record PaymentGatewayStatusResponse(
         String status,
         String reason
 ) {
+
+    public boolean isSuccess() {
+        return "SUCCESS".equalsIgnoreCase(status);
+    }
+
+    public boolean isFailed() {
+        return "FAILED".equalsIgnoreCase(status);
+    }
+
+    public boolean isUnknown() {
+        return "UNKNOWN".equalsIgnoreCase(status);
+    }
 }

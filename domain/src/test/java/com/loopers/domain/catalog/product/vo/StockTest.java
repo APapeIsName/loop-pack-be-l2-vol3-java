@@ -89,6 +89,18 @@ class StockTest {
     }
 
     @Test
+    void 재고_증가_성공_새_객체_반환() {
+        // given
+        Stock stock = Stock.of(70L);
+
+        // when
+        Stock increased = stock.increase(Quantity.of(30L));
+
+        // then
+        assertThat(increased.getValue()).isEqualTo(100L);
+    }
+
+    @Test
     void 같은_값이면_동등하다() {
         // given
         Stock stock1 = Stock.of(100L);

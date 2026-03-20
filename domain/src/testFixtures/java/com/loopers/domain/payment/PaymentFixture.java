@@ -19,4 +19,22 @@ public class PaymentFixture {
     public static Payment create(Long orderId, Long memberId, long amount) {
         return Payment.request(orderId, memberId, DEFAULT_CARD_TYPE, DEFAULT_CARD_NO, amount);
     }
+
+    public static Payment createPending() {
+        Payment payment = create();
+        payment.pend("TR:fixture-" + DEFAULT_ORDER_ID);
+        return payment;
+    }
+
+    public static Payment createPending(Long orderId, Long memberId) {
+        Payment payment = create(orderId, memberId);
+        payment.pend("TR:fixture-" + orderId);
+        return payment;
+    }
+
+    public static Payment createPending(Long orderId, Long memberId, long amount) {
+        Payment payment = create(orderId, memberId, amount);
+        payment.pend("TR:fixture-" + orderId);
+        return payment;
+    }
 }

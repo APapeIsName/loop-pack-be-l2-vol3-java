@@ -24,7 +24,8 @@ public class CouponExceptionMessage {
     public enum IssuedCoupon {
         NOT_FOUND("존재하지 않는 발급 쿠폰입니다.", 6_101),
         NOT_AVAILABLE("사용할 수 없는 쿠폰입니다.", 6_102),
-        NOT_OWNER("본인의 쿠폰이 아닙니다.", 6_103);
+        NOT_OWNER("본인의 쿠폰이 아닙니다.", 6_103),
+        NOT_USED("사용되지 않은 쿠폰입니다.", 6_104);
 
         private final String message;
         private final Integer code;

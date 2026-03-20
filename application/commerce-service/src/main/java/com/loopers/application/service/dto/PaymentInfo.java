@@ -22,7 +22,7 @@ public record PaymentInfo(
                 payment.getTransactionKey(),
                 payment.getStatus(),
                 payment.getCardNo(),
-                payment.getAmount(),
+                payment.getAmount().getValue(),
                 payment.getFailureReason()
         );
     }

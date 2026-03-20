@@ -81,6 +81,43 @@ class IssuedCouponTest {
     }
 
     @Test
+    void 사용된_쿠폰_복원_성공() {
+        // given
+        IssuedCoupon issuedCoupon = IssuedCoupon.issue(1L, 100L);
+        issuedCoupon.use();
+
+        // when
+        issuedCoupon.restore();
+
+        // then
+        assertThat(issuedCoupon.isAvailable()).isTrue();
+    }
+
+    @Test
+    void 미사용_쿠폰_복원_시_예외() {
+        // given
+        IssuedCoupon issuedCoupon = IssuedCoupon.issue(1L, 100L);
+
+        // when & then
+        assertThatThrownBy(issuedCoupon::restore)
+                .isInstanceOf(CoreException.class)
+                .hasMessage(CouponExceptionMessage.IssuedCoupon.NOT_USED.message());
+    }
+
+    @Test
+    void 복원된_쿠폰_usedAt이_null() {
+        // given
+        IssuedCoupon issuedCoupon = IssuedCoupon.issue(1L, 100L);
+        issuedCoupon.use();
+
+        // when
+        issuedCoupon.restore();
+
+        // then
+        assertThat(issuedCoupon.getUsedAt()).isNull();
+    }
+
+    @Test
     void 쿠폰_소속_확인() {
         // given
         IssuedCoupon issuedCoupon = IssuedCoupon.issue(1L, 100L);

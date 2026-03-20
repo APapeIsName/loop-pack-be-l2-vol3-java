@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.ZonedDateTime;
 import java.util.List;
 
 @Slf4j
@@ -29,9 +30,10 @@ public class PaymentService {
     private final OrderRepository orderRepository;
     private final PaymentGateway paymentGateway;
     private final TransactionTemplate transactionTemplate;
+    private final OrderService orderService;
 
     public PaymentInfo requestPayment(PaymentRequestCommand command) {
-        Payment payment = transactionTemplate.execute(status -> {
+        Payment saved = transactionTemplate.execute(status -> {
             Order order = orderRepository.findByIdWithPessimisticLock(command.orderId())
                     .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
                             OrderExceptionMessage.Order.NOT_FOUND.message()));
@@ -42,11 +44,12 @@ public class PaymentService {
             }
             if (!order.isAccepted()) {
                 throw new CoreException(ErrorType.CONFLICT,
-                        PaymentExceptionMessage.Payment.ORDER_NOT_ACCEPTED.message());
+                        OrderExceptionMessage.Order.NOT_ACCEPTED.message());
             }
 
-            paymentRepository.findByOrderIdAndStatus(command.orderId(), PaymentStatus.PENDING)
-                    .ifPresent(p -> {
+            paymentRepository.findByOrderIdAndStatusIn(command.orderId(),
+                            List.of(PaymentStatus.REQUESTED, PaymentStatus.PENDING))
+                    .ifPresent(it -> {
                         throw new CoreException(ErrorType.CONFLICT,
                                 PaymentExceptionMessage.Payment.DUPLICATE_PAYMENT.message());
                     });
@@ -60,23 +63,23 @@ public class PaymentService {
         PaymentGatewayResponse pgResponse = paymentGateway.requestPayment(
                 String.valueOf(command.memberId()),
                 new PaymentGatewayRequest(
-                        String.valueOf(payment.getOrderId()),
-                        payment.getCardType().name(),
-                        payment.getCardNo(),
-                        payment.getAmount(),
+                        String.valueOf(saved.getOrderId()),
+                        saved.getCardType().name(),
+                        saved.getCardNo(),
+                        saved.getAmount().getValue(),
                         null));
 
         Payment updated = transactionTemplate.execute(status -> {
-            Payment p = paymentRepository.findById(payment.getId())
+            Payment target = paymentRepository.findById(saved.getId())
                     .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
                             PaymentExceptionMessage.Payment.NOT_FOUND.message()));
 
             if (pgResponse.success()) {
-                p.assignTransactionKey(pgResponse.transactionKey());
+                target.pend(pgResponse.transactionKey());
             } else {
-                p.fail(pgResponse.reason());
+                target.fail(pgResponse.reason());
             }
-            return p;
+            return target;
         });
 
         return PaymentInfo.from(updated);
@@ -84,67 +87,69 @@ public class PaymentService {
 
     @Transactional
     public void handleCallback(PaymentCallbackCommand command) {
-        Payment payment = paymentRepository
+        Payment target = paymentRepository
                 .findByTransactionKeyWithPessimisticLock(command.transactionKey())
                 .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
                         PaymentExceptionMessage.Payment.NOT_FOUND.message()));
 
-        if (!payment.isPending()) {
+        if (target.isCompleted()) {
             return;
         }
 
         if (command.isSuccess()) {
-            payment.approve();
-            Order order = orderRepository.findById(payment.getOrderId())
+            target.approve();
+            Order order = orderRepository.findById(target.getOrderId())
                     .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
                             OrderExceptionMessage.Order.NOT_FOUND.message()));
             order.pay();
         } else {
-            payment.fail(command.reason());
+            target.fail(command.reason());
         }
     }
 
     public void reconcile(Long paymentId) {
-        Payment snapshot = transactionTemplate.execute(status -> {
-            Payment p = paymentRepository.findById(paymentId)
+
+        Payment payment = transactionTemplate.execute(status -> {
+            Payment found = paymentRepository.findById(paymentId)
                     .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
                             PaymentExceptionMessage.Payment.NOT_FOUND.message()));
-            if (!p.isPending() || p.getTransactionKey() == null) {
+            if (found.isCompleted() || !found.hasTransactionKey()) {
                 return null;
             }
-            return p;
+            return found;
         });
 
-        if (snapshot == null) {
+        if (payment == null) {
             return;
         }
 
         PaymentGatewayStatusResponse pgStatus = paymentGateway.getPaymentStatus(
-                String.valueOf(snapshot.getMemberId()), snapshot.getTransactionKey());
+                String.valueOf(payment.getMemberId()), payment.getTransactionKey());
 
-        if ("UNKNOWN".equalsIgnoreCase(pgStatus.status())) {
+        if (pgStatus.isUnknown()) {
             log.warn("PG 상태 조회 불가 — paymentId={}", paymentId);
             return;
         }
 
         transactionTemplate.executeWithoutResult(status -> {
-            Payment payment = paymentRepository
-                    .findByTransactionKeyWithPessimisticLock(snapshot.getTransactionKey())
+            Payment target = paymentRepository
+                    .findByTransactionKeyWithPessimisticLock(payment.getTransactionKey())
                     .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
                             PaymentExceptionMessage.Payment.NOT_FOUND.message()));
 
-            if (!payment.isPending()) {
+            if (target.isCompleted()) {
                 return;
             }
 
-            if ("SUCCESS".equalsIgnoreCase(pgStatus.status())) {
-                payment.approve();
-                Order order = orderRepository.findById(payment.getOrderId())
+            if (pgStatus.isSuccess()) {
+                target.approve();
+                Order order = orderRepository.findById(target.getOrderId())
                         .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
                                 OrderExceptionMessage.Order.NOT_FOUND.message()));
                 order.pay();
-            } else if ("FAILED".equalsIgnoreCase(pgStatus.status())) {
-                payment.fail(pgStatus.reason());
+            } else if (pgStatus.isFailed()) {
+                target.fail(pgStatus.reason());
+                orderService.cancel(target.getOrderId());
             }
         });
     }
@@ -156,6 +161,32 @@ public class PaymentService {
                 reconcile(payment.getId());
             } catch (Exception e) {
                 log.error("결제 복구 실패 — paymentId={}", payment.getId(), e);
+            }
+        }
+    }
+
+    public void expireAbandonedPayments(ZonedDateTime threshold) {
+        List<Payment> requestedPayments = paymentRepository.findByStatus(PaymentStatus.REQUESTED);
+
+        List<Payment> abandoned = requestedPayments.stream()
+                .filter(it -> it.isCreatedBefore(threshold))
+                .toList();
+
+        for (Payment payment : abandoned) {
+            try {
+                transactionTemplate.executeWithoutResult(status -> {
+                    Payment target = paymentRepository.findById(payment.getId())
+                            .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
+                                    PaymentExceptionMessage.Payment.NOT_FOUND.message()));
+
+                    if (target.isRequested()) {
+                        target.fail("결제 처리 시간 초과 — PG 응답 미수신");
+                        orderService.cancel(target.getOrderId());
+                        log.info("방치된 REQUESTED 결제 FAILED 처리 — paymentId={}", target.getId());
+                    }
+                });
+            } catch (Exception e) {
+                log.error("방치된 REQUESTED 결제 실패 처리 오류 — paymentId={}", payment.getId(), e);
             }
         }
     }

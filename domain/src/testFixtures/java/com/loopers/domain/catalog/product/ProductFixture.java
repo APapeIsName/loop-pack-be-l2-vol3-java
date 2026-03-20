@@ -1,6 +1,6 @@
 package com.loopers.domain.catalog.product;
 
-import com.loopers.domain.catalog.product.vo.Money;
+import com.loopers.domain.common.vo.Money;
 import com.loopers.domain.catalog.product.vo.Stock;
 
 public class ProductFixture {

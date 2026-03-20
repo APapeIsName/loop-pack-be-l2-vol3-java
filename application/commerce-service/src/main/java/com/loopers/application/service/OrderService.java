@@ -11,6 +11,9 @@ import com.loopers.domain.catalog.product.Product;
 import com.loopers.domain.catalog.product.vo.Quantity;
 import com.loopers.domain.coupon.CouponApplyResult;
 import com.loopers.domain.coupon.CouponApplyService;
+import com.loopers.domain.coupon.IssuedCoupon;
+import com.loopers.domain.coupon.IssuedCouponRepository;
+import com.loopers.domain.coupon.CouponExceptionMessage;
 import com.loopers.domain.order.*;
 import com.loopers.support.error.CoreException;
 import com.loopers.support.error.ErrorType;
@@ -33,6 +36,7 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderLineRepository orderLineRepository;
     private final OrderLineSnapshotRepository orderLineSnapshotRepository;
+    private final IssuedCouponRepository issuedCouponRepository;
 
     @Transactional
     public OrderInfo create(OrderCreateCommand command) {
@@ -70,6 +74,37 @@ public class OrderService {
         List<OrderLineSnapshot> snapshots = saveSnapshots(savedLines);
 
         return toOrderInfo(savedOrder, savedLines, snapshots);
+    }
+
+    @Transactional
+    public void cancel(Long orderId) {
+        Order order = orderRepository.findByIdWithPessimisticLock(orderId)
+                .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
+                        OrderExceptionMessage.Order.NOT_FOUND.message()));
+
+        if (!order.isAccepted()) {
+            return;
+        }
+
+        order.cancel();
+
+        List<OrderLine> orderLines = orderLineRepository.findByOrderId(orderId);
+        List<Long> productIds = orderLines.stream()
+                .map(OrderLine::getProductId)
+                .distinct()
+                .sorted()
+                .toList();
+        Map<Long, Product> productMap = orderStockService.lockAndValidate(productIds);
+        for (OrderLine line : orderLines) {
+            productMap.get(line.getProductId()).increaseStock(Quantity.of(line.quantityValue()));
+        }
+
+        if (order.hasCouponApplied()) {
+            IssuedCoupon coupon = issuedCouponRepository.findById(order.getIssuedCouponId())
+                    .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
+                            CouponExceptionMessage.IssuedCoupon.NOT_FOUND.message()));
+            coupon.restore();
+        }
     }
 
     @Transactional(readOnly = true)

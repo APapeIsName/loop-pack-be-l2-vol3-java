@@ -8,12 +8,13 @@ import com.loopers.domain.catalog.OrderStockService;
 import com.loopers.domain.catalog.brand.Brand;
 import com.loopers.domain.catalog.brand.BrandRepository;
 import com.loopers.domain.catalog.product.Product;
-import com.loopers.domain.catalog.product.vo.Money;
+import com.loopers.domain.common.vo.Money;
 import com.loopers.domain.catalog.product.vo.Quantity;
 import com.loopers.domain.catalog.product.vo.Stock;
 import com.loopers.domain.coupon.CouponApplyResult;
 import com.loopers.domain.coupon.CouponApplyService;
 import com.loopers.domain.coupon.IssuedCoupon;
+import com.loopers.domain.coupon.IssuedCouponRepository;
 import com.loopers.domain.order.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -55,6 +56,9 @@ class OrderServiceTest {
 
     @Mock
     private OrderLineSnapshotRepository orderLineSnapshotRepository;
+
+    @Mock
+    private IssuedCouponRepository issuedCouponRepository;
 
     // 주문을 생성한다
 
@@ -327,6 +331,88 @@ class OrderServiceTest {
                 .hasMessage(OrderExceptionMessage.Order.NOT_FOUND.message());
     }
 
+    // 주문 취소
+
+    @Test
+    void 주문_취소_성공_상태_CANCELLED() {
+        // given
+        Order order = createAcceptedOrder(1L, 10L, null);
+        given(orderRepository.findByIdWithPessimisticLock(1L)).willReturn(Optional.of(order));
+        givenOrderLinesForCancel(1L, 1L, 2);
+        givenProductLockAndValidate(1L, "에어맥스", 50, 1L);
+
+        // when
+        orderService.cancel(1L);
+
+        // then
+        assertThat(order.isCancelled()).isTrue();
+    }
+
+    @Test
+    void 주문_취소_성공_재고_복원() {
+        // given
+        Product product = createProduct(1L, "에어맥스", 48, 1L);
+        Order order = createAcceptedOrder(1L, 10L, null);
+        given(orderRepository.findByIdWithPessimisticLock(1L)).willReturn(Optional.of(order));
+        givenOrderLinesForCancel(1L, 1L, 2);
+        givenProductLockAndValidateWithProduct(product);
+
+        // when
+        orderService.cancel(1L);
+
+        // then
+        assertThat(product.hasStock(50)).isTrue();
+    }
+
+    @Test
+    void 주문_취소_성공_쿠폰_복원() {
+        // given
+        IssuedCoupon coupon = IssuedCoupon.issue(1L, 10L);
+        ReflectionTestUtils.setField(coupon, "id", 42L);
+        coupon.use();
+
+        Order order = createAcceptedOrder(1L, 10L, 42L);
+        given(orderRepository.findByIdWithPessimisticLock(1L)).willReturn(Optional.of(order));
+        givenOrderLinesForCancel(1L, 1L, 2);
+        givenProductLockAndValidate(1L, "에어맥스", 50, 1L);
+        given(issuedCouponRepository.findById(42L)).willReturn(Optional.of(coupon));
+
+        // when
+        orderService.cancel(1L);
+
+        // then
+        assertThat(coupon.isAvailable()).isTrue();
+    }
+
+    @Test
+    void 이미_결제된_주문_취소_시_무시() {
+        // given
+        Order order = createAcceptedOrder(1L, 10L, null);
+        order.pay();
+        given(orderRepository.findByIdWithPessimisticLock(1L)).willReturn(Optional.of(order));
+
+        // when
+        orderService.cancel(1L);
+
+        // then
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+    }
+
+    @Test
+    void 쿠폰_없는_주문_취소_시_쿠폰_복원_스킵() {
+        // given
+        Order order = createAcceptedOrder(1L, 10L, null);
+        given(orderRepository.findByIdWithPessimisticLock(1L)).willReturn(Optional.of(order));
+        givenOrderLinesForCancel(1L, 1L, 2);
+        givenProductLockAndValidate(1L, "에어맥스", 50, 1L);
+
+        // when
+        orderService.cancel(1L);
+
+        // then
+        assertThat(order.isCancelled()).isTrue();
+    }
+
     // 전체 주문을 조회한다 (관리자)
 
     @Test
@@ -344,6 +430,20 @@ class OrderServiceTest {
 
         // then
         assertThat(result).hasSize(1);
+    }
+
+    private Order createAcceptedOrder(Long orderId, Long memberId, Long issuedCouponId) {
+        Order order = Order.place(memberId, List.of(
+                OrderLine.of(1L, Quantity.of(2), "에어맥스", "설명", 100000, "나이키")
+        ), OrderStatus.ACCEPTED, issuedCouponId, 200000, 0, 200000);
+        ReflectionTestUtils.setField(order, "id", orderId);
+        return order;
+    }
+
+    private void givenOrderLinesForCancel(Long orderId, Long productId, long quantity) {
+        OrderLine line = OrderLine.of(productId, Quantity.of(quantity), "에어맥스", "설명", 100000, "나이키");
+        line.assignToOrder(orderId);
+        given(orderLineRepository.findByOrderId(orderId)).willReturn(List.of(line));
     }
 
     private Product createProduct(Long id, String name, long stock, Long brandId) {

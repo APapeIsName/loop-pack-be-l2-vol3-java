@@ -64,6 +64,15 @@ public class IssuedCoupon extends BaseTimeEntity {
         this.usedAt = ZonedDateTime.now();
     }
 
+    public void restore() {
+        if (!isUsed()) {
+            throw new CoreException(ErrorType.CONFLICT,
+                    CouponExceptionMessage.IssuedCoupon.NOT_USED.message());
+        }
+        this.status = IssuedCouponStatus.AVAILABLE;
+        this.usedAt = null;
+    }
+
     public boolean belongsToCoupon(Long couponId) {
         return this.couponId.equals(couponId);
     }

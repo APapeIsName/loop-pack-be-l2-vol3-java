@@ -8,7 +8,7 @@ import com.loopers.domain.catalog.brand.Brand;
 import com.loopers.domain.catalog.brand.BrandRepository;
 import com.loopers.domain.catalog.product.Product;
 import com.loopers.domain.catalog.product.ProductRepository;
-import com.loopers.domain.catalog.product.vo.Money;
+import com.loopers.domain.common.vo.Money;
 import com.loopers.domain.catalog.product.vo.Stock;
 import com.loopers.domain.coupon.Coupon;
 import com.loopers.domain.coupon.CouponRepository;
