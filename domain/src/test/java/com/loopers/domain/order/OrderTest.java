@@ -134,6 +134,50 @@ class OrderTest {
     }
 
     @Test
+    void 수락된_주문_결제_완료() {
+        // given
+        List<OrderLine> lines = List.of(
+                OrderLine.of(1L, Quantity.of(2L), "에어맥스", "설명", 100000L, "나이키")
+        );
+        Order order = Order.place(10L, lines, OrderStatus.ACCEPTED, null, 200000, 0, 200000);
+
+        // when
+        order.pay();
+
+        // then
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+    }
+
+    @Test
+    void 거절된_주문_결제_시_예외() {
+        // given
+        List<OrderLine> lines = List.of(
+                OrderLine.of(1L, Quantity.of(2L), "에어맥스", "설명", 100000L, "나이키")
+        );
+        Order order = Order.place(10L, lines, OrderStatus.REJECTED, null, 200000, 0, 200000);
+
+        // when & then
+        assertThatThrownBy(() -> order.pay())
+                .isInstanceOf(CoreException.class)
+                .hasMessage(OrderExceptionMessage.Order.NOT_ACCEPTED.message());
+    }
+
+    @Test
+    void 이미_결제된_주문_재결제_시_예외() {
+        // given
+        List<OrderLine> lines = List.of(
+                OrderLine.of(1L, Quantity.of(2L), "에어맥스", "설명", 100000L, "나이키")
+        );
+        Order order = Order.place(10L, lines, OrderStatus.ACCEPTED, null, 200000, 0, 200000);
+        order.pay();
+
+        // when & then
+        assertThatThrownBy(() -> order.pay())
+                .isInstanceOf(CoreException.class)
+                .hasMessage(OrderExceptionMessage.Order.NOT_ACCEPTED.message());
+    }
+
+    @Test
     void 빈_주문_예외() {
         // when & then
         assertThatThrownBy(() -> Order.place(10L, List.of(), OrderStatus.ACCEPTED, null, 0, 0, 0))

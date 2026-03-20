@@ -25,6 +25,11 @@ public class OrderRepositoryImpl implements OrderRepository {
     }
 
     @Override
+    public Optional<Order> findByIdWithPessimisticLock(Long id) {
+        return orderJpaRepository.findByIdWithPessimisticLock(id);
+    }
+
+    @Override
     public List<Order> findByMemberId(Long memberId) {
         return orderJpaRepository.findByMemberId(memberId);
     }

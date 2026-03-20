@@ -52,6 +52,14 @@ public class Order extends BaseTimeEntity {
         return new Order(memberId, status, issuedCouponId, originalAmount, discountAmount, finalAmount);
     }
 
+    public void pay() {
+        if (!isAccepted()) {
+            throw new CoreException(ErrorType.CONFLICT,
+                    OrderExceptionMessage.Order.NOT_ACCEPTED.message());
+        }
+        this.status = OrderStatus.PAID;
+    }
+
     public boolean isAccepted() {
         return this.status == OrderStatus.ACCEPTED;
     }

@@ -9,6 +9,8 @@ public interface OrderRepository {
 
     Optional<Order> findById(Long id);
 
+    Optional<Order> findByIdWithPessimisticLock(Long id);
+
     List<Order> findByMemberId(Long memberId);
 
     List<Order> findAll();
