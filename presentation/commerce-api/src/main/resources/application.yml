@@ -26,23 +26,30 @@ spring:
 
 pg-client:
   base-url: ${PG_BASE_URL}
+  pg2-base-url: ${PG2_BASE_URL:${PG_BASE_URL}}
   callback-url: ${PG_CALLBACK_URL}
   connect-timeout: 1000
   read-timeout: 1000
 
 resilience4j:
   circuitbreaker:
-    instances:
+    configs:
       payment:
-        failure-rate-threshold: 50
-        sliding-window-size: 10
+        sliding-window-type: TIME_BASED
+        sliding-window-size: 60
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 70
+        slow-call-duration-threshold: 700ms
+        slow-call-rate-threshold: 80
         wait-duration-in-open-state: 30s
         permitted-number-of-calls-in-half-open-state: 3
   retry:
-    instances:
+    configs:
       payment:
         max-attempts: 2
         wait-duration: 500ms
+        ignore-exceptions:
+          - io.github.resilience4j.circuitbreaker.CallNotPermittedException
 
 springdoc:
   use-fqn: true
@@ -56,7 +63,8 @@ spring:
       on-profile: local, test
 
 pg-client:
-  base-url: http://localhost:8081
+  nice-pg-base-url: http://localhost:8081
+  toss-pg-base-url: http://localhost:8082
   callback-url: http://localhost:8080/api/v1/payments/callback
 
 ---

@@ -4,7 +4,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "pg-client")
 public record PgClientProperties(
-        String baseUrl,
+        String nicePgBaseUrl,
+        String tossPgBaseUrl,
         String callbackUrl,
         int connectTimeout,
         int readTimeout

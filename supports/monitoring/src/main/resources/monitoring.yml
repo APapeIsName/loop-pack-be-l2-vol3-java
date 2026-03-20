@@ -33,7 +33,7 @@ management:
     readinessState:
       enabled: true
   server:
-    port: 8081
+    port: 8083
   observations:
     annotations:
       enabled: true
