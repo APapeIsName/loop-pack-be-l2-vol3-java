@@ -8,8 +8,6 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 
-import java.util.Map;
-
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -21,7 +19,7 @@ public class CouponIssueConsumer {
             topics = "coupon-issue-request-events",
             containerFactory = KafkaConfig.SINGLE_LISTENER
     )
-    public void consume(ConsumerRecord<String, Map<String, Object>> record, Acknowledgment ack) {
+    public void consume(ConsumerRecord<String, ?> record, Acknowledgment ack) {
         try {
             couponIssueProcessor.process(record);
             ack.acknowledge();

@@ -7,13 +7,14 @@ import com.loopers.infrastructure.metrics.ProductMetricsRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.common.header.Header;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+
+import static com.loopers.interfaces.consumer.DebeziumMessageParser.extractHeader;
+import static com.loopers.interfaces.consumer.DebeziumMessageParser.extractPayload;
 
 @Slf4j
 @Component
@@ -23,8 +24,9 @@ public class OrderEventProcessor {
     private final ProductMetricsRepository productMetricsRepository;
     private final EventHandledRepository eventHandledRepository;
 
+    @SuppressWarnings("unchecked")
     @Transactional
-    public void process(ConsumerRecord<String, Map<String, Object>> record) {
+    public void process(ConsumerRecord<String, ?> record) {
         Long eventId = Long.valueOf(extractHeader(record, "id"));
         String eventType = extractHeader(record, "eventType");
 
@@ -34,7 +36,7 @@ public class OrderEventProcessor {
         }
 
         if ("ORDER_CREATED".equals(eventType)) {
-            Map<String, Object> payload = record.value();
+            Map<String, Object> payload = extractPayload(record);
             List<Map<String, Object>> orderLines = (List<Map<String, Object>>) payload.get("orderLines");
 
             for (Map<String, Object> line : orderLines) {
@@ -49,13 +51,5 @@ public class OrderEventProcessor {
 
         eventHandledRepository.save(EventHandled.of(eventId));
         log.info("이벤트 처리 완료 — eventId={}, type={}", eventId, eventType);
-    }
-
-    private String extractHeader(ConsumerRecord<?, ?> record, String headerName) {
-        Header header = record.headers().lastHeader(headerName);
-        if (header == null) {
-            return null;
-        }
-        return new String(header.value(), StandardCharsets.UTF_8);
     }
 }

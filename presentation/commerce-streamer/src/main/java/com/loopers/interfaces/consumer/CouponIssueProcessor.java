@@ -6,13 +6,14 @@ import com.loopers.infrastructure.metrics.EventHandledRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.common.header.Header;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
+
+import static com.loopers.interfaces.consumer.DebeziumMessageParser.extractHeader;
+import static com.loopers.interfaces.consumer.DebeziumMessageParser.extractPayload;
 
 @Slf4j
 @Component
@@ -25,7 +26,7 @@ public class CouponIssueProcessor {
     private final StringRedisTemplate redisTemplate;
 
     @Transactional
-    public void process(ConsumerRecord<String, Map<String, Object>> record) {
+    public void process(ConsumerRecord<String, ?> record) {
         Long eventId = Long.valueOf(extractHeader(record, "id"));
 
         if (eventHandledRepository.existsById(eventId)) {
@@ -33,7 +34,7 @@ public class CouponIssueProcessor {
             return;
         }
 
-        Map<String, Object> payload = record.value();
+        Map<String, Object> payload = extractPayload(record);
         Long couponId = ((Number) payload.get("couponId")).longValue();
         Long memberId = ((Number) payload.get("memberId")).longValue();
 
@@ -57,13 +58,5 @@ public class CouponIssueProcessor {
         issuedCouponRepository.save(issuedCoupon);
         eventHandledRepository.save(EventHandled.of(eventId));
         log.info("쿠폰 발급 완료 — couponId={}, memberId={}, count={}", couponId, memberId, count);
-    }
-
-    private String extractHeader(ConsumerRecord<?, ?> record, String headerName) {
-        Header header = record.headers().lastHeader(headerName);
-        if (header == null) {
-            return null;
-        }
-        return new String(header.value(), StandardCharsets.UTF_8);
     }
 }

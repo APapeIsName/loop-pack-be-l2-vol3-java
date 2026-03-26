@@ -9,7 +9,6 @@ import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Map;
 
 @Slf4j
 @Component
@@ -22,8 +21,8 @@ public class CatalogEventConsumer {
             topics = "catalog-events",
             containerFactory = KafkaConfig.BATCH_LISTENER
     )
-    public void consume(List<ConsumerRecord<String, Map<String, Object>>> messages, Acknowledgment ack) {
-        for (ConsumerRecord<String, Map<String, Object>> record : messages) {
+    public void consume(List<ConsumerRecord<String, ?>> messages, Acknowledgment ack) {
+        for (ConsumerRecord<String, ?> record : messages) {
             try {
                 catalogEventProcessor.process(record);
             } catch (Exception e) {

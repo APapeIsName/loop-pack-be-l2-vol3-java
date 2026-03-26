@@ -7,12 +7,13 @@ import com.loopers.infrastructure.metrics.ProductMetricsRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.common.header.Header;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
+
+import static com.loopers.interfaces.consumer.DebeziumMessageParser.extractHeader;
+import static com.loopers.interfaces.consumer.DebeziumMessageParser.extractPayload;
 
 @Slf4j
 @Component
@@ -23,7 +24,7 @@ public class LikeEventProcessor {
     private final EventHandledRepository eventHandledRepository;
 
     @Transactional
-    public void process(ConsumerRecord<String, Map<String, Object>> record) {
+    public void process(ConsumerRecord<String, ?> record) {
         Long eventId = Long.valueOf(extractHeader(record, "id"));
         String eventType = extractHeader(record, "eventType");
 
@@ -32,7 +33,7 @@ public class LikeEventProcessor {
             return;
         }
 
-        Map<String, Object> payload = record.value();
+        Map<String, Object> payload = extractPayload(record);
         Long productId = ((Number) payload.get("productId")).longValue();
 
         ProductMetrics metrics = productMetricsRepository.findByProductId(productId)
@@ -46,13 +47,5 @@ public class LikeEventProcessor {
 
         eventHandledRepository.save(EventHandled.of(eventId));
         log.info("이벤트 처리 완료 — eventId={}, type={}, productId={}", eventId, eventType, productId);
-    }
-
-    private String extractHeader(ConsumerRecord<?, ?> record, String headerName) {
-        Header header = record.headers().lastHeader(headerName);
-        if (header == null) {
-            return null;
-        }
-        return new String(header.value(), StandardCharsets.UTF_8);
     }
 }

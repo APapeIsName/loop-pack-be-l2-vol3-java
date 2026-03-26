@@ -104,10 +104,40 @@ API → outbox INSERT ✅
 
 ---
 
+## 전체 파이프라인 재테스트 — Consumer 역직렬화 수정 후 ✅
+
+### 수정 내용
+- `DebeziumMessageParser` 공통 유틸 추가: String(JSON) / Map 양쪽 처리
+- 모든 Consumer/Processor 제네릭을 `<String, ?>` 로 변경
+- Debezium 메시지의 `schema + payload` 구조에서 `payload`만 추출
+
+### 결과
+
+| 항목 | 값 |
+|---|---|
+| API 요청 | 199건 성공 (1건 실패 — 멤버 중복) |
+| outbox 저장 | 199건 |
+| **issued_coupon 발급** | **정확히 100장** ✅ |
+| 소진 처리 | 99건 |
+| event_handled | 199건 (전부 처리 완료) |
+
+### 파이프라인 전 구간 검증
+
+```
+API → outbox INSERT ✅ (199건)
+→ MySQL binlog ✅
+→ Debezium CDC ✅
+→ Kafka 토픽 발행 ✅
+→ Consumer 수신 ✅
+→ DebeziumMessageParser payload 추출 ✅
+→ Redis INCR 수량 확인 ✅
+→ 100장 발급 + 99장 소진 ✅
+→ event_handled 멱등 처리 ✅
+```
+
+---
+
 ## 미완료 — 다음 단계
 
-- [ ] Consumer 역직렬화 수정 후 전체 파이프라인 재테스트
-- [ ] Consumer 처리 후 issued_coupon 정확히 100장인지 검증
-- [ ] Redis INCR 카운트와 실제 발급 수 일치 확인
 - [ ] Consumer lag 모니터링 (Grafana)
 - [ ] 대규모 테스트 (1000+ 요청)
