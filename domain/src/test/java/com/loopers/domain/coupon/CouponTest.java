@@ -13,7 +13,7 @@ class CouponTest {
     @Test
     void 정액_쿠폰_발행_성공() {
         // when
-        Coupon coupon = Coupon.publish("3000원 할인", CouponType.FIXED, 3000, 10000L,
+        Coupon coupon = Coupon.publishUnlimited("3000원 할인", CouponType.FIXED, 3000, 10000L,
                 ZonedDateTime.now().plusDays(30));
 
         // then
@@ -23,7 +23,7 @@ class CouponTest {
     @Test
     void 정액_쿠폰_타입_확인() {
         // when
-        Coupon coupon = Coupon.publish("3000원 할인", CouponType.FIXED, 3000, null,
+        Coupon coupon = Coupon.publishUnlimited("3000원 할인", CouponType.FIXED, 3000, null,
                 ZonedDateTime.now().plusDays(30));
 
         // then
@@ -33,7 +33,7 @@ class CouponTest {
     @Test
     void 정률_쿠폰_발행_성공() {
         // when
-        Coupon coupon = Coupon.publish("10% 할인", CouponType.RATE, 10, 10000L,
+        Coupon coupon = Coupon.publishUnlimited("10% 할인", CouponType.RATE, 10, 10000L,
                 ZonedDateTime.now().plusDays(30));
 
         // then
@@ -43,7 +43,7 @@ class CouponTest {
     @Test
     void 정액_쿠폰_할인값_0_발행_실패() {
         // when & then
-        assertThatThrownBy(() -> Coupon.publish("할인", CouponType.FIXED, 0, null,
+        assertThatThrownBy(() -> Coupon.publishUnlimited("할인", CouponType.FIXED, 0, null,
                 ZonedDateTime.now().plusDays(30)))
                 .isInstanceOf(CoreException.class)
                 .hasMessage(CouponExceptionMessage.Coupon.INVALID_DISCOUNT_VALUE.message());
@@ -52,7 +52,7 @@ class CouponTest {
     @Test
     void 정액_쿠폰_할인값_음수_발행_실패() {
         // when & then
-        assertThatThrownBy(() -> Coupon.publish("할인", CouponType.FIXED, -3000, null,
+        assertThatThrownBy(() -> Coupon.publishUnlimited("할인", CouponType.FIXED, -3000, null,
                 ZonedDateTime.now().plusDays(30)))
                 .isInstanceOf(CoreException.class)
                 .hasMessage(CouponExceptionMessage.Coupon.INVALID_DISCOUNT_VALUE.message());
@@ -61,7 +61,7 @@ class CouponTest {
     @Test
     void 정률_쿠폰_할인값_0_발행_실패() {
         // when & then
-        assertThatThrownBy(() -> Coupon.publish("할인", CouponType.RATE, 0, null,
+        assertThatThrownBy(() -> Coupon.publishUnlimited("할인", CouponType.RATE, 0, null,
                 ZonedDateTime.now().plusDays(30)))
                 .isInstanceOf(CoreException.class)
                 .hasMessage(CouponExceptionMessage.Coupon.INVALID_DISCOUNT_VALUE.message());
@@ -70,7 +70,7 @@ class CouponTest {
     @Test
     void 정률_쿠폰_할인값_101_발행_실패() {
         // when & then
-        assertThatThrownBy(() -> Coupon.publish("할인", CouponType.RATE, 101, null,
+        assertThatThrownBy(() -> Coupon.publishUnlimited("할인", CouponType.RATE, 101, null,
                 ZonedDateTime.now().plusDays(30)))
                 .isInstanceOf(CoreException.class)
                 .hasMessage(CouponExceptionMessage.Coupon.INVALID_DISCOUNT_VALUE.message());
@@ -79,7 +79,7 @@ class CouponTest {
     @Test
     void 만료된_쿠폰_확인() {
         // given
-        Coupon coupon = Coupon.publish("할인", CouponType.FIXED, 3000, null,
+        Coupon coupon = Coupon.publishUnlimited("할인", CouponType.FIXED, 3000, null,
                 ZonedDateTime.now().minusDays(1));
 
         // when & then
@@ -89,7 +89,7 @@ class CouponTest {
     @Test
     void 만료되지_않은_쿠폰_확인() {
         // given
-        Coupon coupon = Coupon.publish("할인", CouponType.FIXED, 3000, null,
+        Coupon coupon = Coupon.publishUnlimited("할인", CouponType.FIXED, 3000, null,
                 ZonedDateTime.now().plusDays(30));
 
         // when & then
@@ -99,7 +99,7 @@ class CouponTest {
     @Test
     void 최소주문금액_충족_시_적용가능() {
         // given
-        Coupon coupon = Coupon.publish("할인", CouponType.FIXED, 3000, 10000L,
+        Coupon coupon = Coupon.publishUnlimited("할인", CouponType.FIXED, 3000, 10000L,
                 ZonedDateTime.now().plusDays(30));
 
         // when & then
@@ -109,7 +109,7 @@ class CouponTest {
     @Test
     void 최소주문금액_미달_시_적용불가() {
         // given
-        Coupon coupon = Coupon.publish("할인", CouponType.FIXED, 3000, 10000L,
+        Coupon coupon = Coupon.publishUnlimited("할인", CouponType.FIXED, 3000, 10000L,
                 ZonedDateTime.now().plusDays(30));
 
         // when & then
@@ -119,7 +119,7 @@ class CouponTest {
     @Test
     void 최소주문금액_없으면_항상_적용가능() {
         // given
-        Coupon coupon = Coupon.publish("할인", CouponType.FIXED, 3000, null,
+        Coupon coupon = Coupon.publishUnlimited("할인", CouponType.FIXED, 3000, null,
                 ZonedDateTime.now().plusDays(30));
 
         // when & then
@@ -129,7 +129,7 @@ class CouponTest {
     @Test
     void 정액_쿠폰_할인_계산() {
         // given
-        Coupon coupon = Coupon.publish("3000원 할인", CouponType.FIXED, 3000, null,
+        Coupon coupon = Coupon.publishUnlimited("3000원 할인", CouponType.FIXED, 3000, null,
                 ZonedDateTime.now().plusDays(30));
 
         // when
@@ -142,7 +142,7 @@ class CouponTest {
     @Test
     void 정률_쿠폰_할인_계산() {
         // given
-        Coupon coupon = Coupon.publish("10% 할인", CouponType.RATE, 10, null,
+        Coupon coupon = Coupon.publishUnlimited("10% 할인", CouponType.RATE, 10, null,
                 ZonedDateTime.now().plusDays(30));
 
         // when
@@ -155,7 +155,7 @@ class CouponTest {
     @Test
     void 쿠폰_수정_성공() {
         // given
-        Coupon coupon = Coupon.publish("할인", CouponType.FIXED, 3000, null,
+        Coupon coupon = Coupon.publishUnlimited("할인", CouponType.FIXED, 3000, null,
                 ZonedDateTime.now().plusDays(30));
 
         // when
@@ -169,7 +169,7 @@ class CouponTest {
     @Test
     void 쿠폰_수정_후_타입_변경_확인() {
         // given
-        Coupon coupon = Coupon.publish("할인", CouponType.FIXED, 3000, null,
+        Coupon coupon = Coupon.publishUnlimited("할인", CouponType.FIXED, 3000, null,
                 ZonedDateTime.now().plusDays(30));
 
         // when
@@ -183,7 +183,7 @@ class CouponTest {
     @Test
     void 삭제된_쿠폰_수정_시_예외() {
         // given
-        Coupon coupon = Coupon.publish("할인", CouponType.FIXED, 3000, null,
+        Coupon coupon = Coupon.publishUnlimited("할인", CouponType.FIXED, 3000, null,
                 ZonedDateTime.now().plusDays(30));
         coupon.delete();
 
@@ -197,7 +197,7 @@ class CouponTest {
     @Test
     void 할인값_확인() {
         // when
-        Coupon coupon = Coupon.publish("할인", CouponType.FIXED, 5000, null,
+        Coupon coupon = Coupon.publishUnlimited("할인", CouponType.FIXED, 5000, null,
                 ZonedDateTime.now().plusDays(30));
 
         // then
@@ -207,7 +207,7 @@ class CouponTest {
     @Test
     void 최소주문금액_확인() {
         // when
-        Coupon coupon = Coupon.publish("할인", CouponType.FIXED, 3000, 10000L,
+        Coupon coupon = Coupon.publishUnlimited("할인", CouponType.FIXED, 3000, 10000L,
                 ZonedDateTime.now().plusDays(30));
 
         // then
@@ -217,7 +217,7 @@ class CouponTest {
     @Test
     void 최소주문금액_null_확인() {
         // when
-        Coupon coupon = Coupon.publish("할인", CouponType.FIXED, 3000, null,
+        Coupon coupon = Coupon.publishUnlimited("할인", CouponType.FIXED, 3000, null,
                 ZonedDateTime.now().plusDays(30));
 
         // then

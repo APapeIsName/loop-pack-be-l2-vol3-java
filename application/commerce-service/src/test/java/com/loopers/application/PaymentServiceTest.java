@@ -1,6 +1,5 @@
 package com.loopers.application;
 
-import com.loopers.application.service.OrderService;
 import com.loopers.application.service.PaymentService;
 import com.loopers.application.service.dto.PaymentCallbackCommand;
 import com.loopers.application.service.dto.PaymentInfo;
@@ -13,12 +12,15 @@ import com.loopers.domain.order.OrderStatus;
 import com.loopers.domain.payment.*;
 import com.loopers.domain.payment.gateway.PaymentGatewayResponse;
 import com.loopers.domain.payment.gateway.PaymentGatewayStatusResponse;
+import com.loopers.domain.payment.event.PaymentApprovedEvent;
+import com.loopers.domain.payment.event.PaymentTerminallyFailedEvent;
 import com.loopers.support.error.CoreException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -29,6 +31,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
@@ -53,7 +56,7 @@ class PaymentServiceTest {
     private TransactionTemplate transactionTemplate;
 
     @Mock
-    private OrderService orderService;
+    private ApplicationEventPublisher eventPublisher;
 
     @Test
     void 결제_요청_성공_PG_접수() {
@@ -165,14 +168,12 @@ class PaymentServiceTest {
     }
 
     @Test
-    void 콜백_성공_시_결제_승인_및_주문_결제_완료() {
+    void 콜백_성공_시_결제_승인() {
         // given
         Payment payment = PaymentFixture.create(1L, 10L, 50000);
         payment.pend("TR:abc123");
         given(paymentRepository.findByTransactionKeyWithPessimisticLock("TR:abc123"))
                 .willReturn(Optional.of(payment));
-        Order order = createAcceptedOrder(1L, 10L, 50000);
-        given(orderRepository.findById(1L)).willReturn(Optional.of(order));
 
         PaymentCallbackCommand command = new PaymentCallbackCommand("TR:abc123", "SUCCESS", null);
 
@@ -184,14 +185,13 @@ class PaymentServiceTest {
     }
 
     @Test
-    void 콜백_성공_시_주문_상태_PAID() {
+    void 콜백_성공_시_결제_승인_이벤트_발행() {
         // given
         Payment payment = PaymentFixture.create(1L, 10L, 50000);
+        ReflectionTestUtils.setField(payment, "id", 100L);
         payment.pend("TR:abc123");
         given(paymentRepository.findByTransactionKeyWithPessimisticLock("TR:abc123"))
                 .willReturn(Optional.of(payment));
-        Order order = createAcceptedOrder(1L, 10L, 50000);
-        given(orderRepository.findById(1L)).willReturn(Optional.of(order));
 
         PaymentCallbackCommand command = new PaymentCallbackCommand("TR:abc123", "SUCCESS", null);
 
@@ -199,7 +199,7 @@ class PaymentServiceTest {
         paymentService.handleCallback(command);
 
         // then
-        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        verify(eventPublisher).publishEvent(isA(PaymentApprovedEvent.class));
     }
 
     @Test
@@ -234,11 +234,11 @@ class PaymentServiceTest {
         paymentService.handleCallback(command);
 
         // then
-        verify(orderRepository, never()).findById(any());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
-    void reconcile_PG_성공_시_결제_승인() {
+    void reconcile_PG_성공_시_결제_승인_이벤트_발행() {
         // given
         givenTransactionTemplateWithExecuteWithoutResult();
         Payment payment = PaymentFixture.create(1L, 10L, 50000);
@@ -247,12 +247,10 @@ class PaymentServiceTest {
         given(paymentRepository.findById(100L)).willReturn(Optional.of(payment));
 
         Payment target = PaymentFixture.create(1L, 10L, 50000);
+        ReflectionTestUtils.setField(target, "id", 200L);
         target.pend("TR:abc123");
         given(paymentRepository.findByTransactionKeyWithPessimisticLock("TR:abc123"))
                 .willReturn(Optional.of(target));
-
-        Order order = createAcceptedOrder(1L, 10L, 50000);
-        given(orderRepository.findById(1L)).willReturn(Optional.of(order));
 
         given(paymentGateway.getPaymentStatus("10", "TR:abc123"))
                 .willReturn(new PaymentGatewayStatusResponse("TR:abc123", "1", "SUCCESS", null));
@@ -261,7 +259,7 @@ class PaymentServiceTest {
         paymentService.reconcile(100L);
 
         // then
-        assertThat(target.getStatus()).isEqualTo(PaymentStatus.APPROVED);
+        verify(eventPublisher).publishEvent(isA(PaymentApprovedEvent.class));
     }
 
     @Test
@@ -304,7 +302,7 @@ class PaymentServiceTest {
     }
 
     @Test
-    void reconcile_PG_실패_시_주문_취소_호출() {
+    void reconcile_PG_실패_시_최종실패_이벤트_발행() {
         // given
         givenTransactionTemplateWithExecuteWithoutResult();
         Payment payment = PaymentFixture.create(1L, 10L, 50000);
@@ -324,7 +322,7 @@ class PaymentServiceTest {
         paymentService.reconcile(100L);
 
         // then
-        verify(orderService).cancel(1L);
+        verify(eventPublisher).publishEvent(isA(PaymentTerminallyFailedEvent.class));
     }
 
     @Test
@@ -350,11 +348,11 @@ class PaymentServiceTest {
         paymentService.requestPayment(command);
 
         // then
-        verify(orderService, never()).cancel(any());
+        verify(eventPublisher, never()).publishEvent(any(PaymentTerminallyFailedEvent.class));
     }
 
     @Test
-    void 콜백_실패_시_주문_취소_안함() {
+    void 콜백_실패_시_최종실패_이벤트_미발행() {
         // given
         Payment payment = PaymentFixture.create(1L, 10L, 50000);
         payment.pend("TR:abc123");
@@ -367,7 +365,7 @@ class PaymentServiceTest {
         paymentService.handleCallback(command);
 
         // then
-        verify(orderService, never()).cancel(any());
+        verify(eventPublisher, never()).publishEvent(any(PaymentTerminallyFailedEvent.class));
     }
 
     private Order createAcceptedOrder(Long id, Long memberId, long finalAmount) {

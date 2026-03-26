@@ -10,7 +10,8 @@ public class CouponExceptionMessage {
         ALREADY_EXPIRED("이미 만료된 쿠폰입니다.", 6_002),
         ALREADY_DELETED("이미 삭제된 쿠폰입니다.", 6_003),
         INVALID_DISCOUNT_VALUE("할인 값이 유효하지 않습니다.", 6_004),
-        MIN_ORDER_AMOUNT_NOT_MET("최소 주문 금액을 충족하지 않습니다.", 6_005);
+        MIN_ORDER_AMOUNT_NOT_MET("최소 주문 금액을 충족하지 않습니다.", 6_005),
+        NOT_LIMITED("수량 제한이 없는 쿠폰입니다.", 6_006);
 
         private final String message;
         private final Integer code;

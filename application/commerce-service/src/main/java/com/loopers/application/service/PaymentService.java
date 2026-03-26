@@ -7,6 +7,8 @@ import com.loopers.domain.order.Order;
 import com.loopers.domain.order.OrderExceptionMessage;
 import com.loopers.domain.order.OrderRepository;
 import com.loopers.domain.payment.*;
+import com.loopers.domain.payment.event.PaymentApprovedEvent;
+import com.loopers.domain.payment.event.PaymentTerminallyFailedEvent;
 import com.loopers.domain.payment.gateway.PaymentGatewayRequest;
 import com.loopers.domain.payment.gateway.PaymentGatewayResponse;
 import com.loopers.domain.payment.gateway.PaymentGatewayStatusResponse;
@@ -14,6 +16,7 @@ import com.loopers.support.error.CoreException;
 import com.loopers.support.error.ErrorType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -30,7 +33,7 @@ public class PaymentService {
     private final OrderRepository orderRepository;
     private final PaymentGateway paymentGateway;
     private final TransactionTemplate transactionTemplate;
-    private final OrderService orderService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public PaymentInfo requestPayment(PaymentRequestCommand command) {
         Payment saved = transactionTemplate.execute(status -> {
@@ -98,10 +101,8 @@ public class PaymentService {
 
         if (command.isSuccess()) {
             target.approve();
-            Order order = orderRepository.findById(target.getOrderId())
-                    .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
-                            OrderExceptionMessage.Order.NOT_FOUND.message()));
-            order.pay();
+            eventPublisher.publishEvent(PaymentApprovedEvent.of(
+                    target.getId(), target.getOrderId(), target.getMemberId(), target.getAmount().getValue()));
         } else {
             target.fail(command.reason());
         }
@@ -143,13 +144,12 @@ public class PaymentService {
 
             if (pgStatus.isSuccess()) {
                 target.approve();
-                Order order = orderRepository.findById(target.getOrderId())
-                        .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
-                                OrderExceptionMessage.Order.NOT_FOUND.message()));
-                order.pay();
+                eventPublisher.publishEvent(PaymentApprovedEvent.of(
+                        target.getId(), target.getOrderId(), target.getMemberId(), target.getAmount().getValue()));
             } else if (pgStatus.isFailed()) {
                 target.fail(pgStatus.reason());
-                orderService.cancel(target.getOrderId());
+                eventPublisher.publishEvent(PaymentTerminallyFailedEvent.of(
+                        target.getId(), target.getOrderId(), target.getMemberId(), target.getAmount().getValue(), pgStatus.reason()));
             }
         });
     }
@@ -181,7 +181,8 @@ public class PaymentService {
 
                     if (target.isRequested()) {
                         target.fail("결제 처리 시간 초과 — PG 응답 미수신");
-                        orderService.cancel(target.getOrderId());
+                        eventPublisher.publishEvent(PaymentTerminallyFailedEvent.of(
+                                target.getId(), target.getOrderId(), target.getMemberId(), target.getAmount().getValue(), "결제 처리 시간 초과 — PG 응답 미수신"));
                         log.info("방치된 REQUESTED 결제 FAILED 처리 — paymentId={}", target.getId());
                     }
                 });

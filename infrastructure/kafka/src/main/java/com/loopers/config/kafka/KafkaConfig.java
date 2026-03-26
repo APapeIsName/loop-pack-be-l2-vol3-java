@@ -21,6 +21,7 @@ import java.util.Map;
 @EnableConfigurationProperties(KafkaProperties.class)
 public class KafkaConfig {
     public static final String BATCH_LISTENER = "BATCH_LISTENER_DEFAULT";
+    public static final String SINGLE_LISTENER = "SINGLE_LISTENER_DEFAULT";
 
     public static final int MAX_POLLING_SIZE = 3000; // read 3000 msg
     public static final int FETCH_MIN_BYTES = (1024 * 1024); // 1mb
@@ -70,6 +71,24 @@ public class KafkaConfig {
         factory.setBatchMessageConverter(new BatchMessagingMessageConverter(converter));
         factory.setConcurrency(3);
         factory.setBatchListener(true);
+        return factory;
+    }
+
+    @Bean(name = SINGLE_LISTENER)
+    public ConcurrentKafkaListenerContainerFactory<Object, Object> defaultSingleListenerContainerFactory(
+            KafkaProperties kafkaProperties,
+            ByteArrayJsonMessageConverter converter
+    ) {
+        Map<String, Object> consumerConfig = new HashMap<>(kafkaProperties.buildConsumerProperties());
+        consumerConfig.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, SESSION_TIMEOUT_MS);
+        consumerConfig.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, HEARTBEAT_INTERVAL_MS);
+        consumerConfig.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, MAX_POLL_INTERVAL_MS);
+
+        ConcurrentKafkaListenerContainerFactory<Object, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(new DefaultKafkaConsumerFactory<>(consumerConfig));
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
+        factory.setRecordMessageConverter(converter);
+        factory.setConcurrency(3);
         return factory;
     }
 }

@@ -1,0 +1,113 @@
+# Round 07 — k6 부하 테스트 결과
+
+---
+
+## 테스트 환경
+
+| 항목 | 값 |
+|---|---|
+| API 서버 | commerce-api (localhost:8080) |
+| Consumer 서버 | commerce-streamer (localhost:8082) |
+| Kafka | KRaft 단일 브로커 (localhost:19092) |
+| Kafka Connect (Debezium) | debezium/connect:2.5 (localhost:8084) |
+| MySQL | 8.0 (localhost:3306) |
+| Redis | 7.0 Master-Replica (localhost:6379/6380) |
+
+---
+
+## 선착순 쿠폰 발급 — API 부하 테스트
+
+### 시나리오
+- 100장 한정 선착순 쿠폰
+- 동시 100 VU, 총 200회 요청
+- k6 `shared-iterations` executor
+
+### 결과
+
+| 항목 | 값 |
+|---|---|
+| 총 요청 | 200 |
+| 성공 | 197 (98.5%) |
+| 실패 | 3 (1.5%) |
+| 에러율 | 0% (threshold 통과) |
+| p50 응답시간 | 1.5초 |
+| p90 응답시간 | 2.42초 |
+| p95 응답시간 | 2.5초 |
+| 처리량 | ~10 req/s |
+
+### 검증
+
+| 항목 | 기대값 | 실제값 | 결과 |
+|---|---|---|---|
+| outbox 저장 | 197건 | 197건 | ✅ |
+| 멤버 등록 | 200명 | 200명 | ✅ |
+| API 에러율 | < 10% | 1.5% | ✅ |
+
+### 비고
+- API 쪽(요청 접수 → outbox INSERT)은 정상 동작 확인
+- 3건 실패는 동시 멤버 등록 시 loginId 중복 충돌로 추정
+- p95 응답시간이 2.5초로 높은 편 — BCrypt 비밀번호 검증이 요청마다 발생하기 때문
+
+---
+
+## 전체 파이프라인 테스트
+
+### 파이프라인 동작 확인
+
+```
+API → outbox INSERT ✅
+→ MySQL binlog ✅
+→ Debezium CDC 감지 ✅
+→ Kafka 토픽(coupon-issue-request-events) 발행 ✅
+→ Consumer 수신 ✅
+→ Consumer 처리 ❌ (역직렬화 에러)
+```
+
+### 발견된 이슈
+
+**Consumer 역직렬화 실패**
+- Debezium이 보내는 메시지에 JSON Schema wrapper가 포함
+- Consumer가 `Map<String, Object>`로 받으려 했지만, schema+payload 구조의 복합 JSON이 들어옴
+- `ClassCastException: String cannot be cast to Map` 에러
+- 수정 필요: Debezium 메시지 포맷에 맞게 파싱 로직 변경
+
+**Debezium 메시지 실제 포맷:**
+```json
+{
+  "schema": {
+    "type": "struct",
+    "fields": [
+      {"type": "int32", "optional": true, "field": "couponId"},
+      {"type": "int32", "optional": true, "field": "memberId"},
+      {"type": "string", "optional": true, "field": "occurredAt"}
+    ]
+  },
+  "payload": {
+    "couponId": 1,
+    "memberId": 15,
+    "occurredAt": "2026-03-27T00:07:11.350295"
+  }
+}
+```
+
+---
+
+## 테스트 중 발견한 인프라 이슈
+
+| 이슈 | 원인 | 해결 |
+|---|---|---|
+| 앱 서버 포트 충돌 (8083) | actuator와 Kafka Connect 충돌 | Kafka Connect를 8084로 변경 |
+| Streamer 포트 충돌 (8080) | API 서버와 동일 포트 | Streamer를 8082+8085로 실행 |
+| 멤버 등록 실패 — loginId | 언더스코어가 LoginId VO에서 거부 | loginId에 특수문자 제거 |
+| 멤버 등록 실패 — name | 숫자가 MemberName VO에서 거부 | name에 숫자 제거 |
+| 토픽 네이밍 불일치 | aggregate_type `"coupon"` → `coupon-events` 토픽, Consumer는 `coupon-issue-requests` 구독 | aggregate_type을 `"coupon-issue-request"`로 변경 → `coupon-issue-request-events` |
+
+---
+
+## 미완료 — 다음 단계
+
+- [ ] Consumer 역직렬화 수정 후 전체 파이프라인 재테스트
+- [ ] Consumer 처리 후 issued_coupon 정확히 100장인지 검증
+- [ ] Redis INCR 카운트와 실제 발급 수 일치 확인
+- [ ] Consumer lag 모니터링 (Grafana)
+- [ ] 대규모 테스트 (1000+ 요청)

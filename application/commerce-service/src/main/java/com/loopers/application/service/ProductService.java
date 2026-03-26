@@ -12,6 +12,7 @@ import com.loopers.domain.catalog.product.ProductRepository;
 import com.loopers.domain.catalog.product.ProductSortType;
 import com.loopers.domain.common.vo.Money;
 import com.loopers.domain.catalog.product.vo.Stock;
+import com.loopers.domain.catalog.product.event.ProductViewedEvent;
 import com.loopers.support.error.CoreException;
 import com.loopers.support.error.ErrorType;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +20,7 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +35,7 @@ public class ProductService {
 
     private final ProductRepository productRepository;
     private final BrandRepository brandRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @CacheEvict(cacheNames = "products", allEntries = true)
     @Transactional
@@ -67,6 +70,7 @@ public class ProductService {
                 .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
                         BrandExceptionMessage.Brand.NOT_FOUND.message()));
 
+        eventPublisher.publishEvent(ProductViewedEvent.of(id, null));
         return ProductInfo.from(product, brand);
     }
 

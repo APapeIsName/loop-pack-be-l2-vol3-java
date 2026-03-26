@@ -11,17 +11,17 @@ public class CouponFixture {
     public static final ZonedDateTime DEFAULT_EXPIRED_AT = ZonedDateTime.now().plusDays(30);
 
     public static Coupon create() {
-        return Coupon.publish(DEFAULT_NAME, DEFAULT_TYPE, DEFAULT_DISCOUNT_VALUE,
+        return Coupon.publishUnlimited(DEFAULT_NAME, DEFAULT_TYPE, DEFAULT_DISCOUNT_VALUE,
                 DEFAULT_MIN_ORDER_AMOUNT, DEFAULT_EXPIRED_AT);
     }
 
     public static Coupon createRate(long discountValue) {
-        return Coupon.publish("정률 할인", CouponType.RATE, discountValue,
+        return Coupon.publishUnlimited("정률 할인", CouponType.RATE, discountValue,
                 DEFAULT_MIN_ORDER_AMOUNT, DEFAULT_EXPIRED_AT);
     }
 
     public static Coupon createExpired() {
-        return Coupon.publish(DEFAULT_NAME, DEFAULT_TYPE, DEFAULT_DISCOUNT_VALUE,
+        return Coupon.publishUnlimited(DEFAULT_NAME, DEFAULT_TYPE, DEFAULT_DISCOUNT_VALUE,
                 DEFAULT_MIN_ORDER_AMOUNT, ZonedDateTime.now().minusDays(1));
     }
 }
