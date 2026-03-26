@@ -21,14 +21,31 @@
 
 | 항목 | 요약 |
 |---|---|
-| @EventListener vs BEFORE_COMMIT | BEFORE_COMMIT이 의도가 더 명확할 수 있음 |
-| @EventListener 실효성 | 리스너가 하나면 직접 호출이 더 명확 |
-| Redis INCR ↔ DB 불일치 | INCR 성공 → DB 실패 시 카운트 어긋남 |
+| ~~@EventListener vs BEFORE_COMMIT~~ | ~~BEFORE_COMMIT이 의도가 더 명확할 수 있음~~ → Outbox 리스너를 BEFORE_COMMIT으로 변경 완료 |
+| ~~@EventListener 실효성~~ | OrderPaymentEventListener — 이벤트 유지. 결제 승인/실패는 확장 가능성 높은 도메인 사건 (알림, 로깅 등) |
+| Redis INCR ↔ DB 불일치 | 아래 상세 참조 |
 | event_handled/outbox 정리 | 계속 쌓이는 구조 → TTL/아카이빙 필요 |
 | ~~toJson 중복~~ | ~~공통 유틸 추출~~ → EventJsonSerializer로 해결 |
 | Consumer 배치 처리 | 현재 1건씩 DB 쿼리 → productId별 그룹핑 후 한 번에 UPDATE로 개선 가능 |
 | VO 노출 (Payment.request) | long 대신 Money를 받는 게 더 명확 |
 | 선착순 실전 방어 | 매크로/봇, 핫키 집중, 중복 발급, Redis 장애 |
+
+### Redis INCR ↔ DB 불일치 (리뷰 포인트)
+
+**문제**: Redis INCR 성공 → DB INSERT 실패 시 카운트만 올라가고 실제 발급 안 됨. DECR로 롤백해도 DECR 자체가 실패할 수 있음. Redis와 DB 두 곳에 쓰는 한 불일치 가능성 존재.
+
+**대안들**:
+
+| 방법 | 원리 | 장점 | 단점 |
+|---|---|---|---|
+| DB 실패 시 Redis DECR | 보상 롤백 | 간단 | DECR도 실패할 수 있음 |
+| 스케줄링 대사 | 주기적으로 Redis ↔ DB 비교 보정 | 확실 | 지연 있음 |
+| Redis Lua Script | INCR + 조건을 원자적 실행 | Redis 안에서는 정확 | DB 불일치는 여전히 |
+| Redis List (RPUSH) | 발급 대상을 List에 넣고 Consumer가 꺼내서 처리 | 유실 방지 (올리브영 방식) | 구조 변경 필요 |
+| 분산 락 | Redis 락으로 한 요청씩 처리 | 확실 | 성능 저하 |
+| DB만 사용 (Redis 제거) | DB COUNT로 카운팅 | 불일치 원천 차단 | 성능 낮음 |
+
+**참고**: 현재 Kafka Consumer가 순차 처리하므로 동시성 문제가 없어 Redis 없이 DB COUNT만으로도 가능. Redis는 성능 최적화 목적이었으나 순차 처리 환경에서는 이점이 크지 않음.
 
 ---
 
