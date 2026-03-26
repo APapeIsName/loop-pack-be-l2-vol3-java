@@ -24,7 +24,7 @@
 | ~~@EventListener vs BEFORE_COMMIT~~ | ~~BEFORE_COMMIT이 의도가 더 명확할 수 있음~~ → Outbox 리스너를 BEFORE_COMMIT으로 변경 완료 |
 | ~~@EventListener 실효성~~ | OrderPaymentEventListener — 이벤트 유지. 결제 승인/실패는 확장 가능성 높은 도메인 사건 (알림, 로깅 등) |
 | Redis INCR ↔ DB 불일치 | 아래 상세 참조 |
-| event_handled/outbox 정리 | 계속 쌓이는 구조 → TTL/아카이빙 필요 |
+| ~~event_handled/outbox 정리~~ | EventCleanupScheduler 추가 (14일 보존, 매일 01시). TODO: Batch Job/Step 전환 |
 | ~~toJson 중복~~ | ~~공통 유틸 추출~~ → EventJsonSerializer로 해결 |
 | Consumer 배치 처리 | 현재 1건씩 DB 쿼리 → productId별 그룹핑 후 한 번에 UPDATE로 개선 가능 |
 | VO 노출 (Payment.request) | long 대신 Money를 받는 게 더 명확 |

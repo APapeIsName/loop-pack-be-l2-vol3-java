@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+// TODO: Spring Batch Job/Step 구조로 전환
 @Slf4j
 @Component
 @RequiredArgsConstructor
