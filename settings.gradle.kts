@@ -4,6 +4,7 @@ include(
     ":apps:commerce-api",
     ":apps:commerce-streamer",
     ":apps:commerce-batch",
+    ":apps:fcfs-demo",
     ":modules:jpa",
     ":modules:redis",
     ":modules:kafka",
