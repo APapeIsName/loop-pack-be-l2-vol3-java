@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loopers.domain.catalog.product.event.ProductViewedEvent;
 import com.loopers.domain.like.event.ProductLikedEvent;
 import com.loopers.domain.like.event.ProductUnlikedEvent;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
@@ -15,11 +14,15 @@ import static org.springframework.transaction.event.TransactionPhase.AFTER_COMMI
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class MetricsKafkaEventListener {
 
     private final KafkaTemplate<Object, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
+
+    public MetricsKafkaEventListener(KafkaTemplate<Object, Object> kafkaTemplate, ObjectMapper objectMapper) {
+        this.kafkaTemplate = kafkaTemplate;
+        this.objectMapper = objectMapper;
+    }
 
     @TransactionalEventListener(phase = AFTER_COMMIT)
     public void handle(ProductLikedEvent event) {

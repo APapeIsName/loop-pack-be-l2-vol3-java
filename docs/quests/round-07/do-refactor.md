@@ -25,7 +25,8 @@
 | @EventListener 실효성 | 리스너가 하나면 직접 호출이 더 명확 |
 | Redis INCR ↔ DB 불일치 | INCR 성공 → DB 실패 시 카운트 어긋남 |
 | event_handled/outbox 정리 | 계속 쌓이는 구조 → TTL/아카이빙 필요 |
-| toJson 중복 | 공통 유틸 추출 |
+| ~~toJson 중복~~ | ~~공통 유틸 추출~~ → EventJsonSerializer로 해결 |
+| Consumer 배치 처리 | 현재 1건씩 DB 쿼리 → productId별 그룹핑 후 한 번에 UPDATE로 개선 가능 |
 | VO 노출 (Payment.request) | long 대신 Money를 받는 게 더 명확 |
 | 선착순 실전 방어 | 매크로/봇, 핫키 집중, 중복 발급, Redis 장애 |
 
