@@ -18,7 +18,7 @@ public class CatalogEventConsumer {
     private final CatalogEventProcessor catalogEventProcessor;
 
     @KafkaListener(
-            topics = "catalog-events",
+            topics = "product-view-events",
             containerFactory = KafkaConfig.BATCH_LISTENER
     )
     public void consume(List<ConsumerRecord<String, ?>> messages, Acknowledgment ack) {

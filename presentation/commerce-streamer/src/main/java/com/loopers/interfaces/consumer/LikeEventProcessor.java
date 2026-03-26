@@ -12,7 +12,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
 
-import static com.loopers.interfaces.consumer.DebeziumMessageParser.extractHeader;
 import static com.loopers.interfaces.consumer.DebeziumMessageParser.extractPayload;
 
 @Slf4j
@@ -25,27 +24,19 @@ public class LikeEventProcessor {
 
     @Transactional
     public void process(ConsumerRecord<String, ?> record) {
-        Long eventId = Long.valueOf(extractHeader(record, "id"));
-        String eventType = extractHeader(record, "eventType");
-
-        if (eventHandledRepository.existsById(eventId)) {
-            log.debug("이미 처리된 이벤트 — eventId={}", eventId);
-            return;
-        }
-
         Map<String, Object> payload = extractPayload(record);
         Long productId = ((Number) payload.get("productId")).longValue();
+        String topic = record.topic();
 
         ProductMetrics metrics = productMetricsRepository.findByProductId(productId)
                 .orElseGet(() -> productMetricsRepository.save(ProductMetrics.init(productId)));
 
-        if ("PRODUCT_LIKED".equals(eventType)) {
+        if ("product-like-events".equals(topic)) {
             metrics.incrementLikes();
-        } else if ("PRODUCT_UNLIKED".equals(eventType)) {
+        } else if ("product-unlike-events".equals(topic)) {
             metrics.decrementLikes();
         }
 
-        eventHandledRepository.save(EventHandled.of(eventId));
-        log.info("이벤트 처리 완료 — eventId={}, type={}, productId={}", eventId, eventType, productId);
+        log.info("좋아요 집계 완료 — topic={}, productId={}", topic, productId);
     }
 }

@@ -14,7 +14,7 @@ const USER_COUNT = parseInt(__ENV.USER_COUNT || '200');
 
 // ── 시나리오: 선착순 쿠폰 발급 ──
 export const options = {
-    setupTimeout: '180s',
+    setupTimeout: '600s',
     scenarios: {
         coupon_rush: {
             executor: 'shared-iterations',

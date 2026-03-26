@@ -6,6 +6,7 @@ dependencies {
     implementation(project(":application:commerce-service"))
     implementation(project(":infrastructure:jpa"))
     implementation(project(":infrastructure:redis"))
+    implementation(project(":infrastructure:kafka"))
     implementation(project(":infrastructure:security"))
     implementation(project(":supports:jackson"))
     implementation(project(":supports:logging"))

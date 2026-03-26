@@ -18,7 +18,7 @@ public class LikeEventConsumer {
     private final LikeEventProcessor likeEventProcessor;
 
     @KafkaListener(
-            topics = "like-events",
+            topics = {"product-like-events", "product-unlike-events"},
             containerFactory = KafkaConfig.BATCH_LISTENER
     )
     public void consume(List<ConsumerRecord<String, ?>> messages, Acknowledgment ack) {
