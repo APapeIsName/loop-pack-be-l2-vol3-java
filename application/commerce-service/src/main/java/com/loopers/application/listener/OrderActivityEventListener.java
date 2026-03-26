@@ -5,8 +5,10 @@ import com.loopers.domain.order.event.OrderCancelledEvent;
 import com.loopers.domain.order.event.OrderCreatedEvent;
 import com.loopers.domain.outbox.OutboxEvent;
 import com.loopers.domain.outbox.OutboxEventRepository;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionalEventListener;
+
+import static org.springframework.transaction.event.TransactionPhase.BEFORE_COMMIT;
 
 @Component
 public class OrderActivityEventListener {
@@ -19,14 +21,14 @@ public class OrderActivityEventListener {
         this.serializer = new EventJsonSerializer(objectMapper);
     }
 
-    @EventListener
+    @TransactionalEventListener(phase = BEFORE_COMMIT)
     public void handle(OrderCreatedEvent event) {
         outboxEventRepository.save(OutboxEvent.create(
                 "order", event.orderId(), "ORDER_CREATED", serializer.toJson(event)
         ));
     }
 
-    @EventListener
+    @TransactionalEventListener(phase = BEFORE_COMMIT)
     public void handle(OrderCancelledEvent event) {
         outboxEventRepository.save(OutboxEvent.create(
                 "order", event.orderId(), "ORDER_CANCELLED", serializer.toJson(event)
