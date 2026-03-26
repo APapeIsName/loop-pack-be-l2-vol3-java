@@ -6,6 +6,7 @@ include(
     ":presentation:commerce-api",
     ":presentation:commerce-batch",
     ":presentation:commerce-streamer",
+    ":presentation:fcfs-demo",
     ":infrastructure:jpa",
     ":infrastructure:redis",
     ":infrastructure:kafka",

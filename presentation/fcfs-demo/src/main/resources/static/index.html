@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>선착순 쿠폰 발급</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #1a1a2e; color: #eee;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background: #16213e; border-radius: 16px; padding: 48px;
+            width: 420px; text-align: center; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        h1 { font-size: 24px; margin-bottom: 8px; }
+        .subtitle { color: #888; font-size: 14px; margin-bottom: 32px; }
+        .progress-wrap {
+            background: #0f3460; border-radius: 8px; height: 32px;
+            overflow: hidden; margin-bottom: 8px; position: relative;
+        }
+        .progress-bar {
+            background: linear-gradient(90deg, #e94560, #ff6b6b);
+            height: 100%; transition: width 0.3s ease; border-radius: 8px;
+        }
+        .progress-text {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-weight: bold; font-size: 14px; text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
+        .countdown {
+            font-size: 48px; font-weight: bold; margin: 24px 0;
+            font-variant-numeric: tabular-nums;
+        }
+        .countdown.open { color: #4ade80; }
+        .btn {
+            background: #e94560; color: white; border: none; border-radius: 12px;
+            padding: 16px 48px; font-size: 18px; font-weight: bold;
+            cursor: pointer; transition: all 0.2s;
+            width: 100%; margin: 16px 0;
+        }
+        .btn:hover:not(:disabled) { background: #ff6b6b; transform: scale(1.02); }
+        .btn:disabled { background: #333; cursor: not-allowed; opacity: 0.5; }
+        .btn:active:not(:disabled) { transform: scale(0.98); }
+        .result {
+            font-size: 20px; font-weight: bold; padding: 16px;
+            border-radius: 8px; margin-top: 16px; display: none;
+        }
+        .result.success { display: block; background: #064e3b; color: #4ade80; }
+        .result.failure { display: block; background: #450a0a; color: #f87171; }
+        .info { color: #666; font-size: 12px; margin-top: 16px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1 id="couponName">선착순 쿠폰 발급</h1>
+    <div class="subtitle">선착순으로 쿠폰을 받아보세요</div>
+
+    <div class="progress-wrap">
+        <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+        <div class="progress-text" id="progressText">0 / 0</div>
+    </div>
+
+    <div class="countdown" id="countdown">--:--</div>
+
+    <button class="btn" id="issueBtn" disabled onclick="issueCoupon()">
+        쿠폰 받기
+    </button>
+
+    <div class="result" id="result"></div>
+    <div class="info" id="statusInfo"></div>
+</div>
+
+<script>
+    const COUPON_ID = new URLSearchParams(location.search).get('id') || 1;
+    const MEMBER_ID = new URLSearchParams(location.search).get('member') || 1;
+    const API = `/api/fcfs/${COUPON_ID}`;
+    let openAt = null;
+    let issued = false;
+
+    async function fetchStatus() {
+        try {
+            const res = await fetch(`${API}/status`);
+            const data = await res.json();
+
+            document.getElementById('couponName').textContent = data.name || '선착순 쿠폰 발급';
+            const pct = data.totalQuantity > 0
+                ? (data.issuedCount / data.totalQuantity * 100) : 0;
+            document.getElementById('progressBar').style.width = pct + '%';
+            document.getElementById('progressText').textContent =
+                `${data.issuedCount} / ${data.totalQuantity}`;
+
+            if (data.openAt) {
+                openAt = new Date(data.openAt);
+            }
+
+            document.getElementById('statusInfo').textContent =
+                `발급: ${data.issuedCount}/${data.totalQuantity}`;
+        } catch (e) { /* ignore */ }
+    }
+
+    function updateCountdown() {
+        const el = document.getElementById('countdown');
+        const btn = document.getElementById('issueBtn');
+
+        if (!openAt) {
+            el.textContent = '대기 중';
+            btn.disabled = true;
+            return;
+        }
+
+        const now = new Date();
+        const diff = openAt - now;
+
+        if (diff <= 0) {
+            el.textContent = 'OPEN!';
+            el.classList.add('open');
+            if (!issued) btn.disabled = false;
+        } else {
+            const sec = Math.ceil(diff / 1000);
+            const m = Math.floor(sec / 60);
+            const s = sec % 60;
+            el.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            el.classList.remove('open');
+            btn.disabled = true;
+        }
+    }
+
+    async function issueCoupon() {
+        if (issued) return;
+        const btn = document.getElementById('issueBtn');
+        btn.disabled = true;
+        btn.textContent = '요청 중...';
+
+        try {
+            const res = await fetch(`${API}/issue`, {
+                method: 'POST',
+                headers: { 'X-Member-Id': String(MEMBER_ID) }
+            });
+            const data = await res.json();
+            const resultEl = document.getElementById('result');
+            resultEl.className = 'result ' + (data.success ? 'success' : 'failure');
+            resultEl.textContent = data.message;
+            resultEl.style.display = 'block';
+            issued = true;
+            btn.textContent = data.success ? '발급 완료' : '실패';
+        } catch (e) {
+            const resultEl = document.getElementById('result');
+            resultEl.className = 'result failure';
+            resultEl.textContent = '네트워크 오류';
+            resultEl.style.display = 'block';
+            btn.textContent = '다시 시도';
+            btn.disabled = false;
+        }
+    }
+
+    fetchStatus();
+    setInterval(fetchStatus, 1000);
+    setInterval(updateCountdown, 100);
+</script>
+</body>
+</html>
