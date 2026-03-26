@@ -27,7 +27,7 @@
 | ~~event_handled/outbox 정리~~ | EventCleanupScheduler 추가 (14일 보존, 매일 01시). TODO: Batch Job/Step 전환 |
 | ~~toJson 중복~~ | ~~공통 유틸 추출~~ → EventJsonSerializer로 해결 |
 | Consumer 배치 처리 | 현재 1건씩 DB 쿼리 → productId별 그룹핑 후 한 번에 UPDATE로 개선 가능 |
-| VO 노출 (Payment.request) | long 대신 Money를 받는 게 더 명확 |
+| VO 노출 (Payment.request) | `long amount` → `Money amount`로 변경. 호출부 18곳 (PaymentService, PaymentTest 14곳, PaymentFixture 3곳, PaymentEventTransactionTest 2곳). Order.getFinalAmount() 반환 타입도 변경 필요 |
 | 선착순 실전 방어 | 매크로/봇, 핫키 집중, 중복 발급, Redis 장애 |
 
 ### Redis INCR ↔ DB 불일치 (리뷰 포인트)
