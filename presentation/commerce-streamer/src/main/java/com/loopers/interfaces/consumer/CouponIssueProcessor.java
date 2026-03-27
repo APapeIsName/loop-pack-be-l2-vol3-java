@@ -61,9 +61,16 @@ public class CouponIssueProcessor {
             return;
         }
 
-        IssuedCoupon issuedCoupon = IssuedCoupon.issue(couponId, memberId);
-        issuedCouponRepository.save(issuedCoupon);
-        eventHandledRepository.save(EventHandled.of(eventId));
-        log.info("쿠폰 발급 완료 — couponId={}, memberId={}, count={}", couponId, memberId, count);
+        try {
+            IssuedCoupon issuedCoupon = IssuedCoupon.issue(couponId, memberId);
+            issuedCouponRepository.save(issuedCoupon);
+            eventHandledRepository.save(EventHandled.of(eventId));
+            log.info("쿠폰 발급 완료 — couponId={}, memberId={}, count={}", couponId, memberId, count);
+        } catch (Exception e) {
+            redisTemplate.opsForSet().remove(issuedKey, memberId.toString());
+            redisTemplate.opsForValue().decrement(redisKey);
+            log.error("쿠폰 발급 실패, Redis 롤백 — couponId={}, memberId={}", couponId, memberId, e);
+            throw e;
+        }
     }
 }
