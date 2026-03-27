@@ -112,70 +112,34 @@ ApplicationEvent 중에서 **유실되면 비즈니스에 문제가 생기는 �
 - Kafka Consumer(메시지 수신 + Ack)와 Processor(DB 트랜잭션 처리)를 별도 빈으로 분리해야 `@Transactional`이 정상 동작함
 - `LikeEventConsumer` → Kafka 소비 + Ack / `LikeEventProcessor` → @Transactional DB 처리
 
-**Outbox 저장은 같은 TX에서 — AFTER_COMMIT이 아닌 @EventListener 사용**
-- AFTER_COMMIT으로 outbox에 저장하면, 커밋 후 리스너 실행 전에 앱이 죽으면 outbox 기록 유실
+**Outbox 저장은 같은 TX에서 — @TransactionalEventListener(BEFORE_COMMIT) 사용**
 - Outbox Pattern의 본래 의도는 비즈니스 데이터와 outbox를 같은 TX에 저장하는 것
-- `@EventListener`(동기, 같은 TX)로 변경하여 서비스의 TX 안에서 outbox 저장을 보장
+- `BEFORE_COMMIT`으로 커밋 직전에 outbox 저장 → 비즈니스 로직을 안 끊고 마지막에 처리
 
-### Phase 2 변경 이력
+**비정합성 허용 이벤트는 KafkaTemplate 직접 발행**
+- 좋아요/조회수는 유실돼도 스케줄링으로 보정 가능 → Outbox 불필요
+- AFTER_COMMIT 리스너에서 KafkaTemplate.send()로 직접 Kafka 발행
+- commerce-api에 `infrastructure:kafka` 의존 추가
 
-**Producer 쪽 (commerce-api)**
+**Graceful Degradation — Redis Feature Flag**
+- 선착순 이벤트 시 비핵심 집계를 수동으로 끌 수 있음
+- Redis 키: `feature:metrics:like`, `feature:metrics:view`
+- Admin API: `PUT /api-admin/v1/features/{key}?enabled=false`
+- 꺼진 동안 빠진 집계는 자정 스케줄러가 보정
 
-| 파일 | 변경 |
-|---|---|
-| `domain/.../outbox/OutboxEvent.java` | 신규 — Outbox 엔티티 |
-| `domain/.../outbox/OutboxEventRepository.java` | 신규 — Repository 인터페이스 |
-| `infrastructure/.../outbox/OutboxEventJpaRepository.java` | 신규 — JPA Repository |
-| `infrastructure/.../outbox/OutboxEventRepositoryImpl.java` | 신규 — Repository 구현체 |
-| `application/.../listener/LikesCountEventListener.java` | AFTER_COMMIT → @EventListener, outbox 저장으로 변경 |
-| `application/.../listener/OrderActivityEventListener.java` | AFTER_COMMIT → @EventListener, outbox 저장 추가 |
-| `application/commerce-service/build.gradle.kts` | jackson-databind 의존 추가 |
+### 집계 파이프라인 요약 (최종)
 
-**인프라**
-
-| 파일 | 변경 |
-|---|---|
-| `docker/infra-compose.yml` | MySQL binlog 설정 추가, Kafka Connect(Debezium) 컨테이너 추가 |
-| `docker/debezium/register-connector.json` | 신규 — Debezium Outbox Event Router 설정 |
-| `docker/debezium/register-connector.sh` | 신규 — Connector 등록 스크립트 |
-
-**Consumer 쪽 (commerce-streamer)**
-
-| 파일 | 변경 |
-|---|---|
-| `streamer/.../metrics/ProductMetrics.java` | 신규 — 집계 엔티티 (likesCount, salesCount, viewCount) |
-| `streamer/.../metrics/ProductMetricsRepository.java` | 신규 — JPA Repository |
-| `streamer/.../metrics/EventHandled.java` | 신규 — 멱등 처리 엔티티 |
-| `streamer/.../metrics/EventHandledRepository.java` | 신규 — JPA Repository |
-| `streamer/.../consumer/LikeEventConsumer.java` | 신규 — 좋아요 Kafka 소비 + Ack |
-| `streamer/.../consumer/LikeEventProcessor.java` | 신규 — 좋아요 @Transactional DB 처리 |
-| `streamer/.../consumer/OrderEventConsumer.java` | 신규 — 주문 Kafka 소비 + Ack |
-| `streamer/.../consumer/OrderEventProcessor.java` | 신규 — 판매량 @Transactional DB 처리 |
-| `streamer/.../consumer/CatalogEventConsumer.java` | 신규 — 상품 Kafka 소비 + Ack |
-| `streamer/.../consumer/CatalogEventProcessor.java` | 신규 — 조회수 @Transactional DB 처리 |
-
-**추가 Producer 쪽**
-
-| 파일 | 변경 |
-|---|---|
-| `domain/.../catalog/product/event/ProductViewedEvent.java` | 신규 — 상품 조회 이벤트 |
-| `domain/.../order/event/OrderCreatedEvent.java` | 수정 — 상품별 수량 정보(OrderLineItem) 포함하도록 확장 |
-| `application/.../listener/ProductViewEventListener.java` | 신규 — AFTER_COMMIT으로 outbox 저장 (readOnly TX라 같은 TX 불가) |
-| `application/.../service/ProductService.java` | 수정 — getById()에서 ProductViewedEvent 발행, eventPublisher 의존 추가 |
-
-### 집계 파이프라인 요약
-
-| 집계 | Producer 리스너 | TX 방식 | Kafka 토픽 | Consumer |
+| 집계 | Producer | 방식 | Kafka 토픽 | Consumer |
 |---|---|---|---|---|
-| 좋아요 | LikesCountEventListener | @EventListener (같은 TX) | like-events | LikeEventConsumer → LikeEventProcessor |
-| 판매량 | OrderActivityEventListener | @EventListener (같은 TX) | order-events | OrderEventConsumer → OrderEventProcessor |
-| 조회수 | ProductViewEventListener | @TransactionalEventListener (AFTER_COMMIT) | catalog-events | CatalogEventConsumer → CatalogEventProcessor |
+| 좋아요 | MetricsKafkaEventListener | AFTER_COMMIT → KafkaTemplate 직접 | product-like-events / product-unlike-events | LikeEventConsumer → LikeEventProcessor |
+| 조회수 | MetricsKafkaEventListener | AFTER_COMMIT → KafkaTemplate 직접 | product-view-events | CatalogEventConsumer → CatalogEventProcessor |
+| 판매량 | OrderActivityEventListener | BEFORE_COMMIT → Outbox → CDC | order-events | OrderEventConsumer → OrderEventProcessor |
 
-- 좋아요/판매량: 쓰기 TX라서 같은 TX에서 outbox 저장 (@EventListener)
-- 조회수: readOnly TX라서 같은 TX에 outbox INSERT 불가 → AFTER_COMMIT + 별도 TX로 저장 (유실 가능성 있으나 조회수는 비즈니스 리스크 낮음)
+- 좋아요/조회수: KafkaTemplate 직접 발행 + 스케줄링 백업 (유실 감수)
+- 판매량: Outbox + CDC (같은 TX 보장, 유실 없음)
 
-**미해결 질문** → [do-how-question.md](do-how-question.md) 참조
-- product_metrics 엔티티의 위치 (streamer vs infrastructure)
+**해결된 질문**
+- product_metrics 엔티티 위치: `infrastructure/jpa`의 `com.loopers.infrastructure.metrics`로 이동 완료 (JPA 스캔 범위 문제)
 
 ---
 
@@ -244,7 +208,7 @@ Phase 2의 Kafka 파이프라인을 실전 시나리오에 적용한다.
 | `domain/.../coupon/CouponExceptionMessage.java` | `NOT_LIMITED` 에러 메시지 추가 |
 | `domain/.../coupon/event/CouponIssueRequestedEvent.java` | 신규 — 선착순 발급 요청 이벤트 |
 | `application/.../service/CouponService.java` | `issue()`에서 limited 분기, limited면 이벤트 발행 |
-| `application/.../listener/CouponIssueEventListener.java` | 신규 — @EventListener, 같은 TX에서 outbox 저장 |
+| `application/.../listener/CouponIssueEventListener.java` | 신규 — BEFORE_COMMIT, 같은 TX에서 outbox 저장 |
 
 **인프라**
 
@@ -256,5 +220,5 @@ Phase 2의 Kafka 파이프라인을 실전 시나리오에 적용한다.
 
 | 파일 | 변경 |
 |---|---|
-| `streamer/.../consumer/CouponIssueConsumer.java` | 신규 — Single Listener, coupon-issue-requests 토픽 구독 |
-| `streamer/.../consumer/CouponIssueProcessor.java` | 신규 — Redis INCR 수량 확인 + issued_coupon 발급 + 멱등 처리 |
+| `streamer/.../consumer/CouponIssueConsumer.java` | 신규 — Single Listener, coupon-issue-request-events 토픽 구독 |
+| `streamer/.../consumer/CouponIssueProcessor.java` | 신규 — Redis SADD 중복 체크 + INCR 수량 확인 + DB 실패 시 보상 롤백 |

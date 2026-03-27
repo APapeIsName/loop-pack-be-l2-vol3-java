@@ -12,13 +12,17 @@ graph LR
     KAFKA[Kafka]
     STR[commerce-streamer]
     REDIS[(Redis)]
+    BATCH[commerce-batch]
 
+    API -->|KafkaTemplate 직접| KAFKA
     API -->|outbox INSERT| DB
     DB -->|binlog push| DEB
     DEB -->|토픽 발행| KAFKA
     KAFKA -->|poll| STR
     STR -->|집계 upsert / 쿠폰 발급| DB
-    STR -->|수량 카운팅| REDIS
+    STR -->|수량 카운팅 / 중복 체크| REDIS
+    API -->|Feature Flag 조회| REDIS
+    BATCH -->|스케줄링 보정| DB
 ```
 
 ---
@@ -30,17 +34,15 @@ sequenceDiagram
     participant 유저
     participant API as commerce-api
     participant DB as MySQL
-    participant DEB as Debezium
     participant KF as Kafka
     participant STR as commerce-streamer
 
     유저->>API: 좋아요 요청
-    API->>DB: 좋아요 등록 + outbox INSERT (같은 TX)
-    Note over API: ProductLikedEvent(memberId, productId) 발행<br/>→ @EventListener (같은 TX) outbox 저장
+    API->>DB: 좋아요 등록 (TX COMMIT)
     API-->>유저: 200 OK
 
-    DB->>DEB: binlog push
-    DEB->>KF: like-events 토픽 발행
+    Note over API: AFTER_COMMIT → KafkaTemplate 직접 발행
+    API->>KF: product-like-events 토픽 발행
     KF->>STR: Consumer poll (Batch)
     STR->>DB: product_metrics.likesCount 증가
 ```
@@ -60,7 +62,7 @@ sequenceDiagram
 
     유저->>API: 주문 요청
     API->>DB: 재고 차감 + 쿠폰 사용 + 주문 저장 + outbox INSERT (같은 TX)
-    Note over API: OrderCreatedEvent(orderId, memberId, orderLines) 발행<br/>→ @EventListener (같은 TX) outbox 저장
+    Note over API: OrderCreatedEvent 발행<br/>→ BEFORE_COMMIT outbox 저장
     API-->>유저: 주문 정보 응답
 
     DB->>DEB: binlog push
@@ -108,18 +110,15 @@ sequenceDiagram
 sequenceDiagram
     participant 유저
     participant API as commerce-api
-    participant DB as MySQL
-    participant DEB as Debezium
     participant KF as Kafka
     participant STR as commerce-streamer
+    participant DB as MySQL
 
     유저->>API: 상품 조회
     API-->>유저: 상품 정보 응답
 
-    Note over API: ProductViewedEvent(productId) 발행<br/>→ @TransactionalEventListener (TX 끝난 후) outbox 저장
-    API->>DB: outbox INSERT (별도 TX)
-
-    DB->>DEB: binlog push
+    Note over API: AFTER_COMMIT → KafkaTemplate 직접 발행
+    API->>KF: product-view-events 토픽 발행
     DEB->>KF: catalog-events 토픽 발행
     KF->>STR: Consumer poll (Batch)
     STR->>DB: product_metrics.viewCount 증가
@@ -153,18 +152,18 @@ sequenceDiagram
 
     유저->>API: 쿠폰 발급 요청
     API->>DB: outbox INSERT (같은 TX)
-    Note over API: CouponIssueRequestedEvent(couponId, memberId) 발행<br/>→ @EventListener (같은 TX) outbox 저장
+    Note over API: CouponIssueRequestedEvent 발행<br/>→ BEFORE_COMMIT outbox 저장
     API-->>유저: 접수 완료
 
     DB->>DEB: binlog push
-    DEB->>KF: coupon-issue-requests 토픽 발행 (key=couponId)
+    DEB->>KF: coupon-issue-request-events 토픽 발행 (key=couponId)
 
     KF->>STR: Consumer poll (Single, 1건씩)
-    STR->>RD: INCR coupon count
-    alt count <= maxQuantity
+    STR->>RD: SADD 중복 체크 + INCR 수량 확인
+    alt 중복 아님 and count <= maxQuantity
         STR->>DB: issued_coupon INSERT (발급 성공)
-    else count > maxQuantity
-        Note over STR: 소진 — 스킵
+    else 중복 or 소진
+        Note over STR: 거절
     end
 ```
 
@@ -209,13 +208,13 @@ sequenceDiagram
 
 ## 이벤트 요약
 
-| 기능 | 이벤트 | TX 방식 | Kafka | Consumer 처리 |
+| 기능 | 이벤트 | 발행 방식 | Kafka 토픽 | Consumer 처리 |
 |---|---|---|---|---|
-| 좋아요 | ProductLikedEvent | 같은 TX | like-events | likesCount 집계 |
-| 좋아요 취소 | ProductUnlikedEvent | 같은 TX | like-events | likesCount 집계 |
-| 주문 생성 | OrderCreatedEvent | 같은 TX | order-events | salesCount 집계 |
-| 주문 취소 | OrderCancelledEvent | 같은 TX | order-events | — |
-| 결제 승인 | PaymentApprovedEvent | 같은 TX | 안 감 | 주문 PAID 직접 변경 |
-| 결제 최종 실패 | PaymentTerminallyFailedEvent | 같은 TX | 안 감 | 주문 취소 직접 처리 |
-| 상품 조회 | ProductViewedEvent | TX 끝난 후 | catalog-events | viewCount 집계 |
-| 선착순 쿠폰 | CouponIssueRequestedEvent | 같은 TX | coupon-issue-requests | Redis INCR + 쿠폰 발급 |
+| 좋아요 | ProductLikedEvent | AFTER_COMMIT → KafkaTemplate | product-like-events | likesCount 집계 |
+| 좋아요 취소 | ProductUnlikedEvent | AFTER_COMMIT → KafkaTemplate | product-unlike-events | likesCount 집계 |
+| 주문 생성 | OrderCreatedEvent | BEFORE_COMMIT → Outbox → CDC | order-events | salesCount 집계 |
+| 주문 취소 | OrderCancelledEvent | BEFORE_COMMIT → Outbox → CDC | order-events | — |
+| 결제 승인 | PaymentApprovedEvent | @EventListener (같은 TX) | 안 감 | 주문 PAID 직접 변경 |
+| 결제 최종 실패 | PaymentTerminallyFailedEvent | @EventListener (같은 TX) | 안 감 | 주문 취소 직접 처리 |
+| 상품 조회 | ProductViewedEvent | AFTER_COMMIT → KafkaTemplate | product-view-events | viewCount 집계 |
+| 선착순 쿠폰 | CouponIssueRequestedEvent | BEFORE_COMMIT → Outbox → CDC | coupon-issue-request-events | Redis SADD/INCR + 발급 |
