@@ -28,7 +28,10 @@
 | ~~toJson 중복~~ | ~~공통 유틸 추출~~ → EventJsonSerializer로 해결 |
 | Consumer 배치 처리 | 현재 1건씩 DB 쿼리 → productId별 그룹핑 후 한 번에 UPDATE로 개선 가능 |
 | VO 노출 (Payment.request) | `long amount` → `Money amount`로 변경. 호출부 18곳 (PaymentService, PaymentTest 14곳, PaymentFixture 3곳, PaymentEventTransactionTest 2곳). Order.getFinalAmount() 반환 타입도 변경 필요 |
-| 선착순 실전 방어 | 매크로/봇, 핫키 집중, 중복 발급, Redis 장애 |
+| ~~선착순 중복 발급~~ | Redis SET(SADD)으로 사용자 단위 중복 체크 구현 완료 |
+| ~~Rate Limiting~~ | 계정당 분당 3회 제한 구현 완료 (CouponRateLimitInterceptor) |
+| ~~Graceful Degradation~~ | Redis Feature Flag + Admin API 구현 완료. 이벤트 시 집계 중단, 스케줄러 보정 |
+| 선착순 추가 방어 | 봇 탐지(CAPTCHA, Device Fingerprint), 대기열 시스템 — 미구현 |
 
 ### Redis INCR ↔ DB 불일치 (리뷰 포인트)
 
