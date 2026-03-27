@@ -59,6 +59,10 @@ public class FcfsCoupon {
         this.issuedCount = 0;
     }
 
+    public void setTotalQuantity(int totalQuantity) {
+        this.totalQuantity = totalQuantity;
+    }
+
     public void setOpenAt(LocalDateTime openAt) {
         this.openAt = openAt;
     }

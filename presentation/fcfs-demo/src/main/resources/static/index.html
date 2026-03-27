@@ -14,10 +14,34 @@
         }
         .container {
             background: #16213e; border-radius: 16px; padding: 48px;
-            width: 420px; text-align: center; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            width: 480px; text-align: center; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
         }
         h1 { font-size: 24px; margin-bottom: 8px; }
-        .subtitle { color: #888; font-size: 14px; margin-bottom: 32px; }
+        .subtitle { color: #888; font-size: 14px; margin-bottom: 24px; }
+
+        /* 라운드 설정 */
+        .setup { margin-bottom: 24px; }
+        .setup-row {
+            display: flex; gap: 12px; margin-bottom: 12px; align-items: center;
+            justify-content: center;
+        }
+        .setup-row label { font-size: 14px; color: #aaa; width: 60px; text-align: right; }
+        .setup-row input {
+            background: #0f3460; border: 1px solid #1a4a8a; border-radius: 8px;
+            color: #eee; padding: 8px 12px; width: 120px; font-size: 16px;
+            text-align: center;
+        }
+        .btn-start {
+            background: #0ea5e9; color: white; border: none; border-radius: 12px;
+            padding: 12px 32px; font-size: 16px; font-weight: bold;
+            cursor: pointer; transition: all 0.2s; width: 100%;
+        }
+        .btn-start:hover:not(:disabled) { background: #38bdf8; transform: scale(1.02); }
+        .btn-start:disabled { background: #333; cursor: not-allowed; opacity: 0.5; }
+
+        .divider { border-top: 1px solid #1a3a5c; margin: 24px 0; }
+
+        /* 진행 상황 */
         .progress-wrap {
             background: #0f3460; border-radius: 8px; height: 32px;
             overflow: hidden; margin-bottom: 8px; position: relative;
@@ -35,41 +59,113 @@
             font-variant-numeric: tabular-nums;
         }
         .countdown.open { color: #4ade80; }
-        .btn {
+        .btn-issue {
             background: #e94560; color: white; border: none; border-radius: 12px;
             padding: 16px 48px; font-size: 18px; font-weight: bold;
-            cursor: pointer; transition: all 0.2s;
-            width: 100%; margin: 16px 0;
+            cursor: pointer; transition: all 0.2s; width: 100%; margin: 16px 0;
         }
-        .btn:hover:not(:disabled) { background: #ff6b6b; transform: scale(1.02); }
-        .btn:disabled { background: #333; cursor: not-allowed; opacity: 0.5; }
-        .btn:active:not(:disabled) { transform: scale(0.98); }
+        .btn-issue:hover:not(:disabled) { background: #ff6b6b; transform: scale(1.02); }
+        .btn-issue:disabled { background: #333; cursor: not-allowed; opacity: 0.5; }
+        .btn-issue:active:not(:disabled) { transform: scale(0.98); }
+
         .result {
-            font-size: 20px; font-weight: bold; padding: 16px;
-            border-radius: 8px; margin-top: 16px; display: none;
+            font-size: 18px; font-weight: bold; padding: 16px;
+            border-radius: 8px; margin-top: 12px; display: none;
         }
         .result.success { display: block; background: #064e3b; color: #4ade80; }
         .result.failure { display: block; background: #450a0a; color: #f87171; }
-        .info { color: #666; font-size: 12px; margin-top: 16px; }
+
+        /* 봇 결과 */
+        .bot-result {
+            background: #0f3460; border-radius: 8px; padding: 16px;
+            margin-top: 16px; display: none; text-align: left; font-size: 14px;
+        }
+        .bot-result.show { display: block; }
+        .bot-result .label { color: #888; }
+        .bot-result .value { color: #eee; font-weight: bold; }
+        .bot-result .row { display: flex; justify-content: space-between; margin: 4px 0; }
+
+        .info { color: #666; font-size: 12px; margin-top: 12px; }
+        .phase { display: none; }
+        .phase.active { display: block; }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1 id="couponName">선착순 쿠폰 발급</h1>
-    <div class="subtitle">선착순으로 쿠폰을 받아보세요</div>
+    <h1>선착순 쿠폰 발급</h1>
+    <div class="subtitle">봇과 함께 달려보세요</div>
 
-    <div class="progress-wrap">
-        <div class="progress-bar" id="progressBar" style="width: 0%"></div>
-        <div class="progress-text" id="progressText">0 / 0</div>
+    <!-- 라운드 설정 -->
+    <div class="phase active" id="setupPhase">
+        <div class="setup">
+            <div class="setup-row">
+                <label>전략</label>
+                <select id="strategy" style="background:#0f3460;border:1px solid #1a4a8a;border-radius:8px;color:#eee;padding:8px 12px;width:120px;font-size:14px;">
+                    <option value="db-lock">DB 비관적 락</option>
+                    <option value="redis-lock">Redis 분산 락</option>
+                    <option value="kafka">Kafka 비동기</option>
+                    <option value="redis">Redis 카운터</option>
+                </select>
+            </div>
+            <div class="setup-row">
+                <label>쿠폰 수</label>
+                <input type="number" id="totalQuantity" value="100" min="1" max="9999">
+            </div>
+            <div class="setup-row">
+                <label>봇 수</label>
+                <input type="number" id="botCount" value="200" min="1" max="9999">
+            </div>
+            <div class="setup-row">
+                <label>대기(초)</label>
+                <input type="number" id="delaySeconds" value="10" min="3" max="60">
+            </div>
+            <div class="setup-row">
+                <label>집중도</label>
+                <select id="botMode" style="background:#0f3460;border:1px solid #1a4a8a;border-radius:8px;color:#eee;padding:8px 12px;width:120px;font-size:14px;">
+                    <option value="burst">일제 발사 (0초)</option>
+                    <option value="tight">매우 집중 (0.1초)</option>
+                    <option value="semi" selected>집중 (0.3초)</option>
+                    <option value="normal">보통 (0.5초)</option>
+                    <option value="spread">분산 (1.0초)</option>
+                </select>
+            </div>
+        </div>
+        <button class="btn-start" id="startBtn" onclick="startRound()">
+            라운드 시작
+        </button>
     </div>
 
-    <div class="countdown" id="countdown">--:--</div>
+    <!-- 진행 중 -->
+    <div class="phase" id="roundPhase">
+        <div class="progress-wrap">
+            <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+            <div class="progress-text" id="progressText">0 / 0</div>
+        </div>
 
-    <button class="btn" id="issueBtn" disabled onclick="issueCoupon()">
-        쿠폰 받기
-    </button>
+        <div class="countdown" id="countdown">--:--</div>
 
-    <div class="result" id="result"></div>
+        <button class="btn-issue" id="issueBtn" disabled onclick="issueCoupon()">
+            쿠폰 받기
+        </button>
+
+        <div class="result" id="result"></div>
+
+        <div class="bot-result" id="botResult">
+            <div class="row"><span class="label">봇 상태</span><span class="value" id="botState">대기 중...</span></div>
+            <div class="row"><span class="label">봇 성공 / 실패</span><span class="value" id="botSuccessFail">-</span></div>
+            <div class="row"><span class="label">에러 (타임아웃)</span><span class="value" id="botErrors">-</span></div>
+            <div class="row"><span class="label">봇 응답시간 avg</span><span class="value" id="botAvg">-</span></div>
+            <div class="row"><span class="label">봇 응답시간 p95</span><span class="value" id="botP95">-</span></div>
+            <div class="row"><span class="label">봇 응답시간 max</span><span class="value" id="botMax">-</span></div>
+            <div class="row"><span class="label">내 응답시간</span><span class="value" id="myResponseTime">-</span></div>
+            <div class="row"><span class="label">전체 소요</span><span class="value" id="botElapsed">-</span></div>
+        </div>
+
+        <button class="btn-start" style="margin-top: 16px;" onclick="resetRound()">
+            다시 하기
+        </button>
+    </div>
+
     <div class="info" id="statusInfo"></div>
 </div>
 
@@ -79,25 +175,99 @@
     const API = `/api/fcfs/${COUPON_ID}`;
     let openAt = null;
     let issued = false;
+    let roundActive = false;
+
+    function showPhase(phase) {
+        document.querySelectorAll('.phase').forEach(el => el.classList.remove('active'));
+        document.getElementById(phase).classList.add('active');
+    }
+
+    const BOT_MODES = {
+        burst:  { mean: 0, std: 0 },
+        tight:  { mean: 0.1, std: 0.05 },
+        semi:   { mean: 0.3, std: 0.15 },
+        normal: { mean: 0.5, std: 0.3 },
+        spread: { mean: 1.0, std: 0.5 }
+    };
+
+    async function startRound() {
+        const bots = document.getElementById('botCount').value;
+        const delay = document.getElementById('delaySeconds').value;
+        const mode = BOT_MODES[document.getElementById('botMode').value];
+        const btn = document.getElementById('startBtn');
+        btn.disabled = true;
+        btn.textContent = '준비 중...';
+
+        try {
+            const strategy = document.getElementById('strategy').value;
+            const quantity = document.getElementById('totalQuantity').value;
+            const res = await fetch(`${API}/start-round?bots=${bots}&delay=${delay}&delayMean=${mode.mean}&delayStd=${mode.std}&strategy=${strategy}&quantity=${quantity}`, { method: 'POST' });
+            const data = await res.json();
+            openAt = new Date(data.openAt);
+            issued = false;
+            roundActive = true;
+
+            // UI 리셋
+            document.getElementById('result').style.display = 'none';
+            document.getElementById('result').className = 'result';
+            document.getElementById('issueBtn').textContent = '쿠폰 받기';
+            document.getElementById('issueBtn').disabled = true;
+            document.getElementById('botResult').classList.add('show');
+            document.getElementById('botState').textContent = '대기 중...';
+            document.getElementById('botSuccessFail').textContent = '-';
+            document.getElementById('botErrors').textContent = '-';
+            document.getElementById('botAvg').textContent = '-';
+            document.getElementById('botP95').textContent = '-';
+            document.getElementById('botMax').textContent = '-';
+            document.getElementById('myResponseTime').textContent = '-';
+            document.getElementById('botElapsed').textContent = '-';
+            document.getElementById('countdown').classList.remove('open');
+
+            showPhase('roundPhase');
+        } catch (e) {
+            alert('라운드 시작 실패: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '라운드 시작';
+        }
+    }
+
+    function resetRound() {
+        roundActive = false;
+        openAt = null;
+        issued = false;
+        showPhase('setupPhase');
+    }
 
     async function fetchStatus() {
         try {
             const res = await fetch(`${API}/status`);
             const data = await res.json();
-
-            document.getElementById('couponName').textContent = data.name || '선착순 쿠폰 발급';
-            const pct = data.totalQuantity > 0
-                ? (data.issuedCount / data.totalQuantity * 100) : 0;
+            const pct = data.totalQuantity > 0 ? (data.issuedCount / data.totalQuantity * 100) : 0;
             document.getElementById('progressBar').style.width = pct + '%';
-            document.getElementById('progressText').textContent =
-                `${data.issuedCount} / ${data.totalQuantity}`;
-
-            if (data.openAt) {
-                openAt = new Date(data.openAt);
-            }
-
+            document.getElementById('progressText').textContent = `${data.issuedCount} / ${data.totalQuantity}`;
             document.getElementById('statusInfo').textContent =
-                `발급: ${data.issuedCount}/${data.totalQuantity}`;
+                `쿠폰 ${data.totalQuantity}장 | 발급 ${data.issuedCount}장`;
+        } catch (e) { /* ignore */ }
+    }
+
+    async function fetchBotStatus() {
+        if (!roundActive) return;
+        try {
+            const res = await fetch('/api/fcfs/bot-status');
+            const data = await res.json();
+            if (data.running) {
+                document.getElementById('botState').textContent = '발사 중...';
+            } else if (data.result) {
+                const r = data.result;
+                document.getElementById('botState').textContent = '완료';
+                document.getElementById('botSuccessFail').textContent = `${r.success} / ${r.fail}`;
+                document.getElementById('botErrors').textContent = r.errors > 0 ? `${r.errors}건` : '0건';
+                document.getElementById('botAvg').textContent = r.avgMs + 'ms';
+                document.getElementById('botP95').textContent = r.p95Ms + 'ms';
+                document.getElementById('botMax').textContent = r.maxMs + 'ms';
+                document.getElementById('botElapsed').textContent = (r.elapsedMs / 1000).toFixed(2) + '초';
+            }
         } catch (e) { /* ignore */ }
     }
 
@@ -105,8 +275,8 @@
         const el = document.getElementById('countdown');
         const btn = document.getElementById('issueBtn');
 
-        if (!openAt) {
-            el.textContent = '대기 중';
+        if (!openAt || !roundActive) {
+            el.textContent = '--:--';
             btn.disabled = true;
             return;
         }
@@ -132,33 +302,83 @@
         if (issued) return;
         const btn = document.getElementById('issueBtn');
         btn.disabled = true;
+        btn.textContent = '접속 대기 중...';
+
+        // 실제 예매처럼 1~3초 대기 (서버 큐 시뮬레이션)
+        const waitMs = 1000 + Math.random() * 2000;
+        await new Promise(r => setTimeout(r, waitMs));
         btn.textContent = '요청 중...';
 
+        const startTime = performance.now();
         try {
             const res = await fetch(`${API}/issue`, {
                 method: 'POST',
                 headers: { 'X-Member-Id': String(MEMBER_ID) }
             });
+            const myTime = Math.round(performance.now() - startTime);
             const data = await res.json();
             const resultEl = document.getElementById('result');
-            resultEl.className = 'result ' + (data.success ? 'success' : 'failure');
-            resultEl.textContent = data.message;
-            resultEl.style.display = 'block';
+            document.getElementById('myResponseTime').textContent = myTime + 'ms';
             issued = true;
-            btn.textContent = data.success ? '발급 완료' : '실패';
+
+            // Kafka 전략: "접수됨" 응답 → 폴링으로 실제 결과 확인
+            if (data.message && data.message.includes('접수')) {
+                resultEl.className = 'result';
+                resultEl.style.display = 'block';
+                resultEl.style.background = '#1e3a5f';
+                resultEl.style.color = '#60a5fa';
+                resultEl.textContent = `접수됨 (${myTime}ms) — 결과 확인 중...`;
+                btn.textContent = '확인 중...';
+                pollMyResult(resultEl, btn);
+            } else {
+                resultEl.className = 'result ' + (data.success ? 'success' : 'failure');
+                resultEl.textContent = data.message + ` (${myTime}ms)`;
+                resultEl.style.display = 'block';
+                btn.textContent = data.success ? '발급 완료' : '실패';
+            }
         } catch (e) {
+            const myTime = Math.round(performance.now() - startTime);
             const resultEl = document.getElementById('result');
             resultEl.className = 'result failure';
-            resultEl.textContent = '네트워크 오류';
+            resultEl.textContent = `네트워크 오류 (${myTime}ms)`;
             resultEl.style.display = 'block';
+            document.getElementById('myResponseTime').textContent = myTime + 'ms (에러)';
             btn.textContent = '다시 시도';
             btn.disabled = false;
         }
     }
 
-    fetchStatus();
+    async function pollMyResult(resultEl, btn) {
+        let attempts = 0;
+        const maxAttempts = 30;
+        const poll = setInterval(async () => {
+            attempts++;
+            try {
+                const res = await fetch(`${API}/my-result?memberId=${MEMBER_ID}`);
+                const data = await res.json();
+                if (data.issued) {
+                    clearInterval(poll);
+                    resultEl.className = 'result success';
+                    resultEl.textContent = `당첨! (${attempts}회 폴링 후 확인)`;
+                    resultEl.style.background = '';
+                    btn.textContent = '발급 완료';
+                } else if (attempts >= maxAttempts) {
+                    clearInterval(poll);
+                    resultEl.className = 'result failure';
+                    resultEl.textContent = `미당첨 (${attempts}회 폴링 후 확인)`;
+                    resultEl.style.background = '';
+                    btn.textContent = '미당첨';
+                } else {
+                    resultEl.textContent = `접수됨 — 결과 확인 중... (${attempts}/${maxAttempts})`;
+                }
+            } catch (e) { /* ignore */ }
+        }, 500);
+    }
+
     setInterval(fetchStatus, 1000);
+    setInterval(fetchBotStatus, 500);
     setInterval(updateCountdown, 100);
+    fetchStatus();
 </script>
 </body>
 </html>

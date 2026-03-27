@@ -45,6 +45,13 @@ public class CouponIssueProcessor {
             return;
         }
 
+        String issuedKey = "coupon:" + couponId + ":issued";
+        if (Boolean.FALSE.equals(redisTemplate.opsForSet().add(issuedKey, memberId.toString()) > 0)) {
+            log.info("중복 발급 거절 — couponId={}, memberId={}", couponId, memberId);
+            eventHandledRepository.save(EventHandled.of(eventId));
+            return;
+        }
+
         String redisKey = "coupon:" + couponId + ":count";
         Long count = redisTemplate.opsForValue().increment(redisKey);
 

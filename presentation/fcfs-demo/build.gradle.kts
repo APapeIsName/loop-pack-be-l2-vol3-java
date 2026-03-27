@@ -1,3 +1,5 @@
+apply(plugin = "org.springframework.boot")
+
 dependencies {
     // JPA + MySQL 직접 (infrastructure:jpa 의존 X — EntityScan 충돌 방지)
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
