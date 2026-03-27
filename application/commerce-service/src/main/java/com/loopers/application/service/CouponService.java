@@ -2,11 +2,13 @@ package com.loopers.application.service;
 
 import com.loopers.application.service.dto.*;
 import com.loopers.domain.coupon.*;
+import com.loopers.domain.coupon.event.CouponIssueRequestedEvent;
 import com.loopers.support.error.CoreException;
 import com.loopers.support.error.ErrorType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,10 +20,11 @@ public class CouponService {
 
     private final CouponRepository couponRepository;
     private final IssuedCouponRepository issuedCouponRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public void create(CouponCreateCommand command) {
-        Coupon coupon = Coupon.publish(
+        Coupon coupon = Coupon.publishUnlimited(
                 command.name(), command.type(), command.value(),
                 command.minOrderAmount(), command.expiredAt());
         couponRepository.save(coupon);
@@ -72,6 +75,11 @@ public class CouponService {
         if (coupon.isExpired()) {
             throw new CoreException(ErrorType.BAD_REQUEST,
                     CouponExceptionMessage.Coupon.ALREADY_EXPIRED.message());
+        }
+
+        if (coupon.isLimited()) {
+            eventPublisher.publishEvent(CouponIssueRequestedEvent.of(command.couponId(), command.memberId()));
+            return;
         }
 
         IssuedCoupon issuedCoupon = IssuedCoupon.issue(command.couponId(), command.memberId());

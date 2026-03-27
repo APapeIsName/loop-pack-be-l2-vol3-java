@@ -9,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -31,6 +32,9 @@ class CouponServiceTest {
 
     @Mock
     private IssuedCouponRepository issuedCouponRepository;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @Test
     void 쿠폰_템플릿_생성_성공() {

@@ -15,9 +15,12 @@ import com.loopers.domain.coupon.IssuedCoupon;
 import com.loopers.domain.coupon.IssuedCouponRepository;
 import com.loopers.domain.coupon.CouponExceptionMessage;
 import com.loopers.domain.order.*;
+import com.loopers.domain.order.event.OrderCancelledEvent;
+import com.loopers.domain.order.event.OrderCreatedEvent;
 import com.loopers.support.error.CoreException;
 import com.loopers.support.error.ErrorType;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +40,7 @@ public class OrderService {
     private final OrderLineRepository orderLineRepository;
     private final OrderLineSnapshotRepository orderLineSnapshotRepository;
     private final IssuedCouponRepository issuedCouponRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public OrderInfo create(OrderCreateCommand command) {
@@ -73,6 +77,10 @@ public class OrderService {
         List<OrderLine> savedLines = orderLineRepository.saveAll(savedOrder.assignOrderLines(orderLines));
         List<OrderLineSnapshot> snapshots = saveSnapshots(savedLines);
 
+        List<OrderCreatedEvent.OrderLineItem> lineItems = requests.stream()
+                .map(req -> new OrderCreatedEvent.OrderLineItem(req.productId(), req.quantity()))
+                .toList();
+        eventPublisher.publishEvent(OrderCreatedEvent.of(savedOrder.getId(), command.memberId(), lineItems));
         return toOrderInfo(savedOrder, savedLines, snapshots);
     }
 
@@ -105,6 +113,8 @@ public class OrderService {
                             CouponExceptionMessage.IssuedCoupon.NOT_FOUND.message()));
             coupon.restore();
         }
+
+        eventPublisher.publishEvent(OrderCancelledEvent.of(orderId, order.getMemberId()));
     }
 
     @Transactional(readOnly = true)

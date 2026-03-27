@@ -9,5 +9,8 @@ dependencies {
     implementation("org.springframework:spring-tx")
     implementation("org.springframework:spring-context")
 
+    // Jackson ObjectMapper
+    implementation("com.fasterxml.jackson.core:jackson-databind")
+
     testImplementation(testFixtures(project(":domain")))
 }

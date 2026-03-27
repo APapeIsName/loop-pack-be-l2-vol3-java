@@ -35,17 +35,30 @@ public class Coupon extends SoftDeletableEntity {
     @Column(name = "expired_at", nullable = false)
     private ZonedDateTime expiredAt;
 
-    private Coupon(Name name, CouponType couponType, long discountValue, Long minOrderAmount, ZonedDateTime expiredAt) {
+    @Column(name = "max_quantity")
+    private Integer maxQuantity;
+
+    private Coupon(Name name, CouponType couponType, long discountValue, Long minOrderAmount, ZonedDateTime expiredAt, Integer maxQuantity) {
         this.name = name;
         this.couponType = couponType;
         this.discountValue = discountValue;
         this.minOrderAmount = minOrderAmount;
         this.expiredAt = expiredAt;
+        this.maxQuantity = maxQuantity;
     }
 
-    public static Coupon publish(String name, CouponType couponType, long discountValue, Long minOrderAmount, ZonedDateTime expiredAt) {
+    public static Coupon publishUnlimited(String name, CouponType couponType, long discountValue, Long minOrderAmount, ZonedDateTime expiredAt) {
         couponType.validate(discountValue);
-        return new Coupon(Name.of(name), couponType, discountValue, minOrderAmount, expiredAt);
+        return new Coupon(Name.of(name), couponType, discountValue, minOrderAmount, expiredAt, null);
+    }
+
+    public static Coupon publishLimited(String name, CouponType couponType, long discountValue, Long minOrderAmount, ZonedDateTime expiredAt, int maxQuantity) {
+        couponType.validate(discountValue);
+        return new Coupon(Name.of(name), couponType, discountValue, minOrderAmount, expiredAt, maxQuantity);
+    }
+
+    public boolean isLimited() {
+        return maxQuantity != null;
     }
 
     public boolean isExpired() {

@@ -75,7 +75,7 @@ class CouponConcurrencyTest {
                 Product.register("쿠폰상품", "설명", Money.of(50000), Stock.of(100), brand.getId()));
 
         Coupon coupon = couponRepository.save(
-                Coupon.publish("동시성쿠폰", CouponType.FIXED, 3000, null, ZonedDateTime.now().plusDays(30)));
+                Coupon.publishUnlimited("동시성쿠폰", CouponType.FIXED, 3000, null, ZonedDateTime.now().plusDays(30)));
         IssuedCoupon issuedCoupon = issuedCouponRepository.save(
                 IssuedCoupon.issue(coupon.getId(), 5000L));
 
@@ -118,7 +118,7 @@ class CouponConcurrencyTest {
                 Product.register("쿠폰실패상품", "설명", Money.of(50000), Stock.of(100), brand.getId()));
 
         Coupon coupon = couponRepository.save(
-                Coupon.publish("동시성실패쿠폰", CouponType.FIXED, 3000, null, ZonedDateTime.now().plusDays(30)));
+                Coupon.publishUnlimited("동시성실패쿠폰", CouponType.FIXED, 3000, null, ZonedDateTime.now().plusDays(30)));
         IssuedCoupon issuedCoupon = issuedCouponRepository.save(
                 IssuedCoupon.issue(coupon.getId(), 6000L));
 
@@ -161,7 +161,7 @@ class CouponConcurrencyTest {
                 Product.register("쿠폰상태상품", "설명", Money.of(50000), Stock.of(100), brand.getId()));
 
         Coupon coupon = couponRepository.save(
-                Coupon.publish("상태확인쿠폰", CouponType.FIXED, 3000, null, ZonedDateTime.now().plusDays(30)));
+                Coupon.publishUnlimited("상태확인쿠폰", CouponType.FIXED, 3000, null, ZonedDateTime.now().plusDays(30)));
         IssuedCoupon issuedCoupon = issuedCouponRepository.save(
                 IssuedCoupon.issue(coupon.getId(), 7000L));
 
@@ -203,7 +203,7 @@ class CouponConcurrencyTest {
                 Product.register("롤백상품", "설명", Money.of(50000), Stock.of(100), brand.getId()));
 
         Coupon coupon = couponRepository.save(
-                Coupon.publish("롤백쿠폰", CouponType.FIXED, 3000, null, ZonedDateTime.now().plusDays(30)));
+                Coupon.publishUnlimited("롤백쿠폰", CouponType.FIXED, 3000, null, ZonedDateTime.now().plusDays(30)));
         IssuedCoupon issuedCoupon = issuedCouponRepository.save(
                 IssuedCoupon.issue(coupon.getId(), 8000L));
 

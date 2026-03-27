@@ -1,0 +1,76 @@
+package com.loopers.interfaces.consumer;
+
+import com.loopers.domain.coupon.*;
+import com.loopers.infrastructure.metrics.EventHandled;
+import com.loopers.infrastructure.metrics.EventHandledRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Map;
+
+import static com.loopers.interfaces.consumer.DebeziumMessageParser.extractHeader;
+import static com.loopers.interfaces.consumer.DebeziumMessageParser.extractPayload;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class CouponIssueProcessor {
+
+    private final CouponRepository couponRepository;
+    private final IssuedCouponRepository issuedCouponRepository;
+    private final EventHandledRepository eventHandledRepository;
+    private final StringRedisTemplate redisTemplate;
+
+    @Transactional
+    public void process(ConsumerRecord<String, ?> record) {
+        Long eventId = Long.valueOf(extractHeader(record, "id"));
+
+        if (eventHandledRepository.existsById(eventId)) {
+            log.debug("이미 처리된 이벤트 — eventId={}", eventId);
+            return;
+        }
+
+        Map<String, Object> payload = extractPayload(record);
+        Long couponId = ((Number) payload.get("couponId")).longValue();
+        Long memberId = ((Number) payload.get("memberId")).longValue();
+
+        Coupon coupon = couponRepository.findById(couponId).orElse(null);
+        if (coupon == null || coupon.isExpired() || coupon.isDeleted()) {
+            log.warn("발급 불가 — couponId={}, 쿠폰 없음/만료/삭제", couponId);
+            eventHandledRepository.save(EventHandled.of(eventId));
+            return;
+        }
+
+        String issuedKey = "coupon:" + couponId + ":issued";
+        if (Boolean.FALSE.equals(redisTemplate.opsForSet().add(issuedKey, memberId.toString()) > 0)) {
+            log.info("중복 발급 거절 — couponId={}, memberId={}", couponId, memberId);
+            eventHandledRepository.save(EventHandled.of(eventId));
+            return;
+        }
+
+        String redisKey = "coupon:" + couponId + ":count";
+        Long count = redisTemplate.opsForValue().increment(redisKey);
+
+        if (count > coupon.getMaxQuantity()) {
+            log.info("쿠폰 소진 — couponId={}, memberId={}, count={}", couponId, memberId, count);
+            eventHandledRepository.save(EventHandled.of(eventId));
+            return;
+        }
+
+        try {
+            IssuedCoupon issuedCoupon = IssuedCoupon.issue(couponId, memberId);
+            issuedCouponRepository.save(issuedCoupon);
+            eventHandledRepository.save(EventHandled.of(eventId));
+            log.info("쿠폰 발급 완료 — couponId={}, memberId={}, count={}", couponId, memberId, count);
+        } catch (Exception e) {
+            redisTemplate.opsForSet().remove(issuedKey, memberId.toString());
+            redisTemplate.opsForValue().decrement(redisKey);
+            log.error("쿠폰 발급 실패, Redis 롤백 — couponId={}, memberId={}", couponId, memberId, e);
+            throw e;
+        }
+    }
+}

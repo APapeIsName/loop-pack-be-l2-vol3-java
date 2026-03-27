@@ -10,7 +10,10 @@ import com.loopers.domain.like.Like;
 import com.loopers.domain.like.LikeMarkService;
 import com.loopers.domain.like.LikeRepository;
 import com.loopers.domain.like.LikeSubjectType;
+import com.loopers.domain.like.event.ProductLikedEvent;
+import com.loopers.domain.like.event.ProductUnlikedEvent;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,17 +30,18 @@ public class LikeService {
     private final ProductRepository productRepository;
     private final LikeRepository likeRepository;
     private final BrandRepository brandRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public void like(LikeRegisterCommand command) {
         likeMarkService.mark(command.memberId(), command.productId());
-        productRepository.updateLikesCount(command.productId(), 1);
+        eventPublisher.publishEvent(ProductLikedEvent.of(command.productId(), command.memberId()));
     }
 
     @Transactional
     public void unlike(Long memberId, Long productId) {
         likeMarkService.unmark(memberId, productId);
-        productRepository.updateLikesCount(productId, -1);
+        eventPublisher.publishEvent(ProductUnlikedEvent.of(productId, memberId));
     }
 
     @Transactional(readOnly = true)

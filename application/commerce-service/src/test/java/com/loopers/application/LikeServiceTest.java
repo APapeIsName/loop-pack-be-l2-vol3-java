@@ -13,15 +13,19 @@ import com.loopers.domain.like.Like;
 import com.loopers.domain.like.LikeMarkService;
 import com.loopers.domain.like.LikeRepository;
 import com.loopers.domain.like.LikeSubjectType;
+import com.loopers.domain.like.event.ProductLikedEvent;
+import com.loopers.domain.like.event.ProductUnlikedEvent;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
@@ -43,8 +47,11 @@ class LikeServiceTest {
     @Mock
     private BrandRepository brandRepository;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     @Test
-    void 좋아요_등록_시_mark_및_likesCount_증가() {
+    void 좋아요_등록_시_mark_호출() {
         // given
         LikeRegisterCommand command = new LikeRegisterCommand(1L, 100L);
 
@@ -53,17 +60,36 @@ class LikeServiceTest {
 
         // then
         verify(likeMarkService).mark(1L, 100L);
-        verify(productRepository).updateLikesCount(100L, 1);
     }
 
     @Test
-    void 좋아요_취소_시_unmark_및_likesCount_감소() {
+    void 좋아요_등록_시_이벤트_발행() {
+        // given
+        LikeRegisterCommand command = new LikeRegisterCommand(1L, 100L);
+
+        // when
+        likeService.like(command);
+
+        // then
+        verify(eventPublisher).publishEvent(isA(ProductLikedEvent.class));
+    }
+
+    @Test
+    void 좋아요_취소_시_unmark_호출() {
         // when
         likeService.unlike(1L, 100L);
 
         // then
         verify(likeMarkService).unmark(1L, 100L);
-        verify(productRepository).updateLikesCount(100L, -1);
+    }
+
+    @Test
+    void 좋아요_취소_시_이벤트_발행() {
+        // when
+        likeService.unlike(1L, 100L);
+
+        // then
+        verify(eventPublisher).publishEvent(isA(ProductUnlikedEvent.class));
     }
 
     @Test
