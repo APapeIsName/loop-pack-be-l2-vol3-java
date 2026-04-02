@@ -43,6 +43,11 @@ resilience4j:
         slow-call-rate-threshold: 80
         wait-duration-in-open-state: 30s
         permitted-number-of-calls-in-half-open-state: 3
+  bulkhead:
+    instances:
+      queue-order:
+        maxConcurrentCalls: 20
+        maxWaitDuration: 3s
   retry:
     configs:
       payment:
@@ -50,6 +55,17 @@ resilience4j:
         wait-duration: 500ms
         ignore-exceptions:
           - io.github.resilience4j.circuitbreaker.CallNotPermittedException
+
+queue:
+  max-capacity: 10000
+  token-ttl-seconds: 300
+  batch-size: 10
+  throughput-per-second: 100
+  display-throughput-per-second: 80
+  scheduler-interval: 100
+  rate-limit:
+    max-requests: 3
+    ttl-seconds: 1
 
 springdoc:
   use-fqn: true
@@ -61,6 +77,38 @@ spring:
   config:
     activate:
       on-profile: local, test
+
+pg-client:
+  nice-pg-base-url: http://localhost:8081
+  toss-pg-base-url: http://localhost:8082
+  callback-url: http://localhost:8080/api/v1/payments/callback
+
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+
+queue:
+  scheduler-interval: 999999999
+
+---
+spring:
+  config:
+    activate:
+      on-profile: loadtest
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
+  endpoint:
+    health:
+      show-details: always
+
+queue:
+  scheduler-interval: 5000
 
 pg-client:
   nice-pg-base-url: http://localhost:8081

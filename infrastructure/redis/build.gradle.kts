@@ -4,6 +4,7 @@ plugins {
 }
 
 dependencies {
+    implementation(project(":domain"))
     api("org.springframework.boot:spring-boot-starter-data-redis")
     api("com.github.ben-manes.caffeine:caffeine")
 
