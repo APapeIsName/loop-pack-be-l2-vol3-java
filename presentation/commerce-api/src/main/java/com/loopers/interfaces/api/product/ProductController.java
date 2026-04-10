@@ -34,6 +34,8 @@ public class ProductController {
     /** 상품 단건 조회 */
     @GetMapping("/{id}")
     public ProductApiResponse getById(@PathVariable Long id) {
-        return ProductApiResponse.from(productService.getById(id));
+        ProductApiResponse response = ProductApiResponse.from(productService.getById(id));
+        productService.trackView(id, null);
+        return response;
     }
 }

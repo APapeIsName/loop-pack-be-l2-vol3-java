@@ -3,6 +3,7 @@ package com.loopers.application.listener;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loopers.domain.order.event.OrderCancelledEvent;
 import com.loopers.domain.order.event.OrderCreatedEvent;
+import com.loopers.domain.order.event.OrderPaidEvent;
 import com.loopers.domain.outbox.OutboxEvent;
 import com.loopers.domain.outbox.OutboxEventRepository;
 import org.springframework.stereotype.Component;
@@ -25,6 +26,13 @@ public class OrderActivityEventListener {
     public void handle(OrderCreatedEvent event) {
         outboxEventRepository.save(OutboxEvent.create(
                 "order", event.orderId(), "ORDER_CREATED", serializer.toJson(event)
+        ));
+    }
+
+    @TransactionalEventListener(phase = BEFORE_COMMIT)
+    public void handle(OrderPaidEvent event) {
+        outboxEventRepository.save(OutboxEvent.create(
+                "order", event.orderId(), "ORDER_PAID", serializer.toJson(event)
         ));
     }
 

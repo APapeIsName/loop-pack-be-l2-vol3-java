@@ -1,5 +1,7 @@
 server:
+  port: 8090
   shutdown: graceful
+
   tomcat:
     threads:
       max: 200 # 최대 워커 스레드 수 (default : 200)
@@ -14,7 +16,10 @@ spring:
   main:
     web-application-type: servlet
   application:
-    name: commerce-api
+    name: commerce-streamer
+  kafka:
+    consumer:
+      group-id: loopers-streamer-consumer
   profiles:
     active: local
   config:
@@ -34,6 +39,10 @@ spring:
   config:
     activate:
       on-profile: local, test
+
+management:
+  server:
+    port: 8093
 
 ---
 spring:

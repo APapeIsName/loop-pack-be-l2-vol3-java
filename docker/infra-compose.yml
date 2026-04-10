@@ -63,8 +63,7 @@ services:
     image: bitnamilegacy/kafka:3.5.1
     container_name: kafka
     ports:
-      - "9092:9092" # 카프카 브로커 PORT
-      - "19092:19092" # 호스트 리스너 얘 떄문인가
+      - "19092:19092" # 호스트 리스너 (로컬 앱 접속용)
     environment:
       - KAFKA_CFG_NODE_ID=1 # 브로커 고유 ID
       - KAFKA_CFG_PROCESS_ROLES=broker,controller # KRaft 모드여서, broker / controller 역할 모두 부여

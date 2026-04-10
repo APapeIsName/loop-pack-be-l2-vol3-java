@@ -13,6 +13,8 @@ import com.loopers.domain.catalog.product.ProductSortType;
 import com.loopers.domain.common.vo.Money;
 import com.loopers.domain.catalog.product.vo.Stock;
 import com.loopers.domain.catalog.product.event.ProductViewedEvent;
+import com.loopers.domain.ranking.ProductRankingRepository;
+import com.loopers.domain.ranking.RankingDateKey;
 import com.loopers.support.error.CoreException;
 import com.loopers.support.error.ErrorType;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +37,7 @@ public class ProductService {
 
     private final ProductRepository productRepository;
     private final BrandRepository brandRepository;
+    private final ProductRankingRepository productRankingRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     @CacheEvict(cacheNames = "products", allEntries = true)
@@ -70,8 +73,10 @@ public class ProductService {
                 .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND,
                         BrandExceptionMessage.Brand.NOT_FOUND.message()));
 
-        eventPublisher.publishEvent(ProductViewedEvent.of(id, null));
-        return ProductInfo.from(product, brand);
+        String today = RankingDateKey.today();
+
+        Long rankingPosition = productRankingRepository.getRank(id, today);
+        return ProductInfo.from(product, brand, rankingPosition);
     }
 
     @Transactional(readOnly = true)
@@ -130,6 +135,11 @@ public class ProductService {
                         ProductExceptionMessage.Product.NOT_FOUND.message()));
 
         product.delete();
+    }
+
+    @Transactional
+    public void trackView(Long productId, Long memberId) {
+        eventPublisher.publishEvent(ProductViewedEvent.of(productId, memberId));
     }
 
     private List<ProductInfo> toProductInfos(List<Product> products) {

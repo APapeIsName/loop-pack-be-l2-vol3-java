@@ -13,6 +13,7 @@ import com.loopers.domain.catalog.product.ProductRepository;
 import com.loopers.domain.catalog.product.ProductSortType;
 import com.loopers.domain.common.vo.Money;
 import com.loopers.domain.catalog.product.vo.Stock;
+import com.loopers.domain.ranking.ProductRankingRepository;
 import com.loopers.support.error.CoreException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +42,9 @@ class ProductServiceTest {
 
     @Mock
     private BrandRepository brandRepository;
+
+    @Mock
+    private ProductRankingRepository productRankingRepository;
 
     @Mock
     private ApplicationEventPublisher eventPublisher;

@@ -10,7 +10,8 @@ public record ProductInfo(
         long price,
         long stock,
         long likesCount,
-        String brandName
+        String brandName,
+        Long rankingPosition
 ) {
 
     public static ProductInfo from(Product product, Brand brand) {
@@ -21,7 +22,21 @@ public record ProductInfo(
                 product.priceValue(),
                 product.stockValue(),
                 product.getLikesCount(),
-                brand != null ? brand.nameValue() : null
+                brand != null ? brand.nameValue() : null,
+                null
+        );
+    }
+
+    public static ProductInfo from(Product product, Brand brand, Long rankingPosition) {
+        return new ProductInfo(
+                product.getId(),
+                product.nameValue(),
+                product.getDescription(),
+                product.priceValue(),
+                product.stockValue(),
+                product.getLikesCount(),
+                brand != null ? brand.nameValue() : null,
+                rankingPosition
         );
     }
 }

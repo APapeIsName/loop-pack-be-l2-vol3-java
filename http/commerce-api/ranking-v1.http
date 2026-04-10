@@ -1,0 +1,14 @@
+### 일간 랭킹 조회 (오늘)
+GET {{commerce-api}}/api/v1/rankings
+
+### 일간 랭킹 조회 (날짜 지정)
+GET {{commerce-api}}/api/v1/rankings?date=20260409&type=DAILY
+
+### 일간 랭킹 조회 (페이지네이션)
+GET {{commerce-api}}/api/v1/rankings?size=10&page=1
+
+### 시간별 랭킹 조회 (현재 시간)
+GET {{commerce-api}}/api/v1/rankings?type=HOURLY
+
+### 시간별 랭킹 조회 (특정 시간)
+GET {{commerce-api}}/api/v1/rankings?date=2026040916&type=HOURLY&size=10&page=1

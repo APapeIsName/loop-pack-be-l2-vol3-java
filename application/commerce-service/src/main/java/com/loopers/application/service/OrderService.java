@@ -114,7 +114,13 @@ public class OrderService {
             coupon.restore();
         }
 
-        eventPublisher.publishEvent(OrderCancelledEvent.of(orderId, order.getMemberId()));
+        List<OrderCancelledEvent.OrderLineItem> cancelledLines = orderLines.stream()
+                .map(line -> new OrderCancelledEvent.OrderLineItem(line.getProductId(), line.quantityValue()))
+                .toList();
+        java.time.LocalDate orderedDate = order.getCreatedAt() != null
+                ? order.getCreatedAt().toLocalDate()
+                : java.time.LocalDate.now();
+        eventPublisher.publishEvent(OrderCancelledEvent.of(orderId, order.getMemberId(), cancelledLines, orderedDate));
     }
 
     @Transactional(readOnly = true)

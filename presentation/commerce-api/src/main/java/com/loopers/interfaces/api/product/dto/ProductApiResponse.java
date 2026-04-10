@@ -9,7 +9,8 @@ public record ProductApiResponse(
         long price,
         long stock,
         long likesCount,
-        String brandName
+        String brandName,
+        Long rankingPosition
 ) {
     public static ProductApiResponse from(ProductInfo info) {
         return new ProductApiResponse(
@@ -19,7 +20,8 @@ public record ProductApiResponse(
                 info.price(),
                 info.stock(),
                 info.likesCount(),
-                info.brandName()
+                info.brandName(),
+                info.rankingPosition()
         );
     }
 }

@@ -7,6 +7,8 @@ import com.loopers.support.error.ErrorType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
+
 @Component
 @RequiredArgsConstructor
 public class LikeMarkService {
@@ -29,12 +31,16 @@ public class LikeMarkService {
         return likeRepository.save(Like.mark(memberId, LikeSubjectType.PRODUCT, productId));
     }
 
-    public void unmark(Long memberId, Long productId) {
+    public LocalDate unmark(Long memberId, Long productId) {
         Like like = likeRepository.findByMemberIdAndSubjectTypeAndSubjectId(
                         memberId, LikeSubjectType.PRODUCT, productId)
                 .orElseThrow(() -> new CoreException(ErrorType.BAD_REQUEST,
                         LikeExceptionMessage.Like.NOT_LIKED.message()));
 
+        LocalDate likedDate = like.getCreatedAt() != null
+                ? like.getCreatedAt().toLocalDate()
+                : LocalDate.now();
         likeRepository.delete(like);
+        return likedDate;
     }
 }

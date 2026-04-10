@@ -1,6 +1,6 @@
 package com.loopers.queue;
 
-import com.loopers.domain.queue.OrderQueueRepository;
+import com.loopers.domain.queue.WaitingQueueRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,7 +15,7 @@ import java.util.concurrent.Executors;
 class QueueRedisPerformanceTest {
 
     @Autowired
-    private OrderQueueRepository orderQueueRepository;
+    private WaitingQueueRepository orderQueueRepository;
 
     @Autowired
     private RedisTemplate<String, String> redisTemplate;

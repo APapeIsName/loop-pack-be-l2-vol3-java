@@ -40,8 +40,8 @@ public class LikeService {
 
     @Transactional
     public void unlike(Long memberId, Long productId) {
-        likeMarkService.unmark(memberId, productId);
-        eventPublisher.publishEvent(ProductUnlikedEvent.of(productId, memberId));
+        java.time.LocalDate likedDate = likeMarkService.unmark(memberId, productId);
+        eventPublisher.publishEvent(ProductUnlikedEvent.of(productId, memberId, likedDate));
     }
 
     @Transactional(readOnly = true)

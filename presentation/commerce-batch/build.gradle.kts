@@ -1,6 +1,9 @@
 apply(plugin = "org.springframework.boot")
 
 dependencies {
+    // domain
+    implementation(project(":domain"))
+
     // add-ons
     implementation(project(":infrastructure:jpa"))
     implementation(project(":infrastructure:redis"))
