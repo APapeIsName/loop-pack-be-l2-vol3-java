@@ -11,4 +11,6 @@ public interface ProductMetricsDailyRepository extends JpaRepository<ProductMetr
     Optional<ProductMetricsDaily> findByProductIdAndDate(Long productId, LocalDate date);
 
     List<ProductMetricsDaily> findByDate(LocalDate date);
+
+    List<ProductMetricsDaily> findByDateBetween(LocalDate startDate, LocalDate endDate);
 }
