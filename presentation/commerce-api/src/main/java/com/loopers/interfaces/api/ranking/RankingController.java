@@ -26,16 +26,11 @@ public class RankingController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "DAILY") RankingType type
     ) {
-        String targetDate = date != null ? date : defaultDateKey(type);
-        return rankingService.getRankings(targetDate, page, size, type).stream()
+        if (date == null) {
+            date = RankingDateKey.defaultKey(type);
+        }
+        return rankingService.getRankings(date, page, size, type).stream()
                 .map(RankingApiResponse::from)
                 .toList();
-    }
-
-    private String defaultDateKey(RankingType type) {
-        return switch (type) {
-            case DAILY -> RankingDateKey.today();
-            case HOURLY -> RankingDateKey.currentHour();
-        };
     }
 }

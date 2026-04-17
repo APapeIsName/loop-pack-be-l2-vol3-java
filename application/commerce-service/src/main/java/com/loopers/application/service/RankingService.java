@@ -30,6 +30,7 @@ public class RankingService {
         return getRankings(date, page, size, RankingType.DAILY);
     }
 
+    @Transactional(readOnly = true)
     public List<RankingInfo> getRankings(String date, int page, int size, RankingType type) {
         long offset = (long) (page - 1) * size;
         List<RankedProduct> rankedProducts = productRankingRepository.getTopProducts(date, offset, size, type);
