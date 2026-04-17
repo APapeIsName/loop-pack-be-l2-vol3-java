@@ -3,7 +3,9 @@ package com.loopers.domain.ranking;
 public enum RankingType {
 
     DAILY("ranking:daily:", 2 * 24 * 60 * 60),
-    HOURLY("ranking:hourly:", 24 * 60 * 60);
+    HOURLY("ranking:hourly:", 24 * 60 * 60),
+    WEEKLY("ranking:weekly:", 8 * 24 * 60 * 60),
+    MONTHLY("ranking:monthly:", 32 * 24 * 60 * 60);
 
     private final String keyPrefix;
     private final long ttlSeconds;

@@ -2,6 +2,9 @@ package com.loopers.domain.ranking;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class RankingScoreTest {
@@ -64,5 +67,49 @@ class RankingScoreTest {
 
         // then
         assertThat(salesOnly).isGreaterThan(viewsOnly);
+    }
+
+    @Test
+    void 주간_점수는_최근_날짜에_높은_가중치를_적용한다() {
+        // given
+        LocalDate today = LocalDate.of(2026, 4, 16);
+        var recentDay = new DailyMetricSnapshot(today.minusDays(1), 100, 10, 5);
+        var oldDay = new DailyMetricSnapshot(today.minusDays(7), 100, 10, 5);
+
+        // when
+        double recentScore = RankingScore.calculateWithDecay(List.of(recentDay), today);
+        double oldScore = RankingScore.calculateWithDecay(List.of(oldDay), today);
+
+        // then
+        assertThat(recentScore).isGreaterThan(oldScore);
+    }
+
+    @Test
+    void 주간_점수는_여러_날의_감쇠_점수를_합산한다() {
+        // given
+        LocalDate today = LocalDate.of(2026, 4, 16);
+        var day1 = new DailyMetricSnapshot(today.minusDays(1), 100, 10, 5);
+        var day2 = new DailyMetricSnapshot(today.minusDays(2), 200, 20, 10);
+
+        double score1 = RankingScore.calculateWithDecay(List.of(day1), today);
+        double score2 = RankingScore.calculateWithDecay(List.of(day2), today);
+
+        // when
+        double combined = RankingScore.calculateWithDecay(List.of(day1, day2), today);
+
+        // then
+        assertThat(combined).isEqualTo(score1 + score2);
+    }
+
+    @Test
+    void 빈_스냅샷이면_점수는_0이다() {
+        // given
+        LocalDate today = LocalDate.of(2026, 4, 16);
+
+        // when
+        double score = RankingScore.calculateWithDecay(List.of(), today);
+
+        // then
+        assertThat(score).isEqualTo(0.0);
     }
 }

@@ -27,4 +27,11 @@ public final class RankingDateKey {
     public static String currentHour() {
         return ofHour(LocalDateTime.now());
     }
+
+    public static String defaultKey(RankingType type) {
+        return switch (type) {
+            case DAILY, WEEKLY, MONTHLY -> today();
+            case HOURLY -> currentHour();
+        };
+    }
 }
